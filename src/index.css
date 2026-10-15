@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased font-sans transition-colors duration-200 selection:bg-blue-600 selection:text-white;
+  }
+}
+
+/* Custom Scrollbar - Theme Aware */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Ensure HTML5 date picker indicator is clearly visible in both light & dark modes */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.85) brightness(1.2);
+  opacity: 0.85;
+  padding: 2px;
+  border-radius: 4px;
+  transition: opacity 0.2s, filter 0.2s, background-color 0.2s;
+}
+
+:root:not(.dark) input[type="date"]::-webkit-calendar-picker-indicator,
+html:not(.dark) input[type="date"]::-webkit-calendar-picker-indicator,
+.light input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+  opacity: 0.75;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background-color: rgba(59, 130, 246, 0.15);
+}
