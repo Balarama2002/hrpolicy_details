@@ -6,8 +6,11 @@ import {
   CheckCircle2, 
   AlertCircle,
   Sun,
-  Moon
+  Moon,
+  LogOut,
+  User
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function Navbar({ 
   onRefresh, 
@@ -19,6 +22,10 @@ export default function Navbar({
   onToggleTheme
 }) {
   const isDark = theme === 'dark';
+  const { user, signOut } = useAuth();
+
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
+  const initial = (displayName[0] || 'U').toUpperCase();
 
   return (
     <header className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 transition-colors duration-200 shadow-sm dark:shadow-none">
@@ -37,7 +44,7 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Right: Actions, Theme Toggle & Status */}
+          {/* Right: Actions, Theme Toggle, User Profile & Status */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Connection Badge */}
             <div 
@@ -72,6 +79,30 @@ export default function Navbar({
             >
               <Settings className="w-4 h-4" />
             </button>
+
+            {/* User Profile & Sign Out */}
+            {user && (
+              <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+                <div 
+                  className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs"
+                  title={`Logged in as ${user.email}`}
+                >
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
+                    {initial}
+                  </div>
+                  <span className="hidden md:inline font-medium text-slate-700 dark:text-slate-200 max-w-[120px] truncate">
+                    {displayName}
+                  </span>
+                </div>
+                <button
+                  onClick={signOut}
+                  className="p-2 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800/80 dark:hover:bg-rose-500/10 rounded-lg border border-slate-200 dark:border-slate-700 transition-all shadow-sm active:scale-95"
+                  title="Sign Out of Dashboard"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
           </div>
         </div>

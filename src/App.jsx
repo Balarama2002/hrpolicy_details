@@ -18,8 +18,12 @@ import {
   parseFeedback,
 } from './services/n8nApi';
 import { EMPLOYEE_DIRECTORY } from './data/employeeDirectory';
+import { useAuth } from './context/AuthContext';
+import AuthPage from './components/auth/AuthPage';
+import { Bot, Loader2 } from 'lucide-react';
 
 export default function App() {
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [config, setConfig] = useState(getStoredConfig());
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -620,6 +624,26 @@ export default function App() {
   }, [timePreset, dateRange]);
 
   const chartGranularity = (timePreset === 'today' || (dateRange.from && dateRange.from === dateRange.to)) ? 'hour' : 'day';
+
+  // 1. Initial auth state check
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center gap-3 transition-colors">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-xl shadow-blue-500/20 animate-pulse">
+          <Bot className="w-6 h-6 text-white" />
+        </div>
+        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+          <span>Verifying authentication...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. If not authenticated, render Login / Sign Up page
+  if (!isAuthenticated) {
+    return <AuthPage theme={theme} onToggleTheme={toggleTheme} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
