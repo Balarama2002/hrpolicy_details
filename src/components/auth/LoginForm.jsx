@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, LogIn, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, LogIn, AlertCircle, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { validateCompanyEmail, COMPANY_DOMAIN } from '../../utils/validation';
 
 export default function LoginForm({ onSwitchToSignUp, onOpenSupabaseConfig }) {
   const { signIn, resetPassword, isConfigured } = useAuth();
@@ -28,6 +29,12 @@ export default function LoginForm({ onSwitchToSignUp, onOpenSupabaseConfig }) {
       return;
     }
 
+    const domainError = validateCompanyEmail(email);
+    if (domainError) {
+      setErrorMessage(domainError);
+      return;
+    }
+
     setIsLoading(true);
     try {
       await signIn(email, password);
@@ -48,6 +55,12 @@ export default function LoginForm({ onSwitchToSignUp, onOpenSupabaseConfig }) {
   const handleForgotPassword = async () => {
     if (!email.trim()) {
       setErrorMessage('Please enter your work email above to receive a password reset link.');
+      return;
+    }
+
+    const domainError = validateCompanyEmail(email);
+    if (domainError) {
+      setErrorMessage(domainError);
       return;
     }
 
@@ -82,9 +95,15 @@ export default function LoginForm({ onSwitchToSignUp, onOpenSupabaseConfig }) {
 
       {/* Work Email */}
       <div>
-        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-          Work Email
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+            Work Email
+          </label>
+          <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3" />
+            @techygeekhub.com only
+          </span>
+        </div>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
             <Mail className="w-4 h-4" />
@@ -93,12 +112,15 @@ export default function LoginForm({ onSwitchToSignUp, onOpenSupabaseConfig }) {
             type="email"
             required
             autoComplete="email"
-            placeholder="name@company.com"
+            placeholder="yourname@techygeekhub.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all font-sans"
           />
         </div>
+        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+          Must be your official TechyGeekHub corporate email
+        </p>
       </div>
 
       {/* Password */}

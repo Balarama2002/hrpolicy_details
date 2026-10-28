@@ -5,6 +5,8 @@ import {
   saveSupabaseConfig, 
   getSupabaseConfig 
 } from '../services/supabaseClient';
+import { validateCompanyEmail } from '../utils/validation';
+import { syncUserInformation } from '../services/userService';
 
 const AuthContext = createContext(null);
 
@@ -78,14 +80,28 @@ export function AuthProvider({ children }) {
       throw new Error('Supabase is not configured yet. Please enter your Supabase Project URL and Anon Key.');
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const domainError = validateCompanyEmail(cleanEmail);
+    if (domainError) {
+      throw new Error(domainError);
+    }
+
     const { data, error } = await client.auth.signInWithPassword({
-      email: email.trim(),
+      email: cleanEmail,
       password,
     });
 
     if (error) throw error;
     setUser(data.user);
     setSession(data.session);
+
+    // Record login activity in 'User information' table
+    syncUserInformation({
+      user: data.user,
+      email: cleanEmail,
+      isLogin: true,
+    }).catch((err) => console.warn('Background sync on login warning:', err));
+
     return data;
   }, []);
 
@@ -96,8 +112,15 @@ export function AuthProvider({ children }) {
       throw new Error('Supabase is not configured yet. Please enter your Supabase Project URL and Anon Key.');
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const domainError = validateCompanyEmail(cleanEmail);
+    if (domainError) {
+      throw new Error(domainError);
+    }
+
+    // 1. Register user with Supabase Auth (passwords are bcrypt encrypted in auth.users)
     const { data, error } = await client.auth.signUp({
-      email: email.trim(),
+      email: cleanEmail,
       password,
       options: {
         data: {
@@ -108,10 +131,22 @@ export function AuthProvider({ children }) {
     });
 
     if (error) throw error;
+
     if (data.session) {
       setUser(data.user);
       setSession(data.session);
     }
+
+    // 2. Sync profile into 'User information' table with cryptographically hashed password
+    syncUserInformation({
+      user: data.user,
+      email: cleanEmail,
+      password,
+      fullName,
+      department,
+      isLogin: false,
+    }).catch((err) => console.warn('Background sync on signup warning:', err));
+
     return data;
   }, []);
 

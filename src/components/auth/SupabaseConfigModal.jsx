@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Database, Key, ExternalLink, X, Check, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { DEFAULT_SUPABASE_URL } from '../../services/supabaseClient';
 
 export default function SupabaseConfigModal({ isOpen, onClose }) {
   const { config, updateConfig } = useAuth();
-  const [url, setUrl] = useState(config.url || '');
+  const [url, setUrl] = useState(config.url || DEFAULT_SUPABASE_URL);
   const [anonKey, setAnonKey] = useState(config.anonKey || '');
   const [isSaved, setIsSaved] = useState(false);
   const [error, setError] = useState('');

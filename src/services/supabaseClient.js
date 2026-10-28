@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_STORAGE_KEY = 'tgh_supabase_config';
+export const DEFAULT_SUPABASE_URL = 'https://vsihdsgoebpkxmztqqil.supabase.co';
 
 export function getSupabaseConfig() {
-  let envUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  let envUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
   let envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
   try {
