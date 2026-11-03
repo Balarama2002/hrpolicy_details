@@ -149,9 +149,18 @@ export function normalizeRow(row) {
   const jiraNumber = row.JIRA_NUMBER || null;
   const jiraUrl = getJiraWebUrl(jiraNumber, row.JIRA_URL);
 
+  const employeeName = row.NAME || row.name || row.EmployeeName || row.user_name || 'Anonymous Employee';
+  const employeeEmail = row.EMAIL || row.email || row.user_email || null;
+
   return {
     id: row.id,
-    name: row.NAME || 'Anonymous Employee',
+    name: employeeName,
+    NAME: employeeName,
+    user_name: employeeName,
+    EmployeeName: employeeName,
+    user_email: employeeEmail,
+    EMAIL: employeeEmail,
+    email: employeeEmail,
     jiraNumber: jiraNumber,
     jiraUrl: jiraUrl,
     rawQuestion: row.QUESTION || '',

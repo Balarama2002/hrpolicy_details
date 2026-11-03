@@ -15,8 +15,10 @@ import {
   UserCheck
 } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
+import { useAuth } from '../context/AuthContext';
 
 export default function KpiCards({ stats, periodLabel }) {
+  const { isAdmin } = useAuth();
   const {
     totalSearches = 0,
     helpfulCount = 0,
@@ -43,7 +45,7 @@ export default function KpiCards({ stats, periodLabel }) {
     : 0;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
       
       {/* 1. Total Searches Card */}
       <div className="relative overflow-hidden bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm dark:shadow-lg hover:border-slate-300 dark:hover:border-slate-700/80 transition-all group">
@@ -214,42 +216,44 @@ export default function KpiCards({ stats, periodLabel }) {
         </div>
       </div>
 
-      {/* 5. NEW CARD: Top Token Consumer (% of Org Tokens) */}
-      <div className="relative overflow-hidden bg-white dark:bg-slate-900/90 border border-amber-300/50 dark:border-amber-500/30 rounded-2xl p-4 shadow-sm dark:shadow-lg hover:border-amber-400 dark:hover:border-amber-500/60 transition-all group">
-        <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors pointer-events-none" />
+      {/* 5. Top Token Consumer (% of Org Tokens) - Admin Only */}
+      {isAdmin && (
+        <div className="relative overflow-hidden bg-white dark:bg-slate-900/90 border border-amber-300/50 dark:border-amber-500/30 rounded-2xl p-4 shadow-sm dark:shadow-lg hover:border-amber-400 dark:hover:border-amber-500/60 transition-all group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors pointer-events-none" />
 
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
-            <Award className="w-3 h-3 text-amber-500" />
-            <span>Top Token Consumer</span>
-          </span>
-          <div className="flex items-center gap-1">
-            <InfoTooltip 
-              title="Highest Token Consuming Employee"
-              description="Identifies the team member who utilized the highest volume of tokens along with their percentage share of total organization usage."
-            />
-            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
-              <Zap className="w-3.5 h-3.5" />
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
+              <Award className="w-3 h-3 text-amber-500" />
+              <span>Top Token Consumer</span>
+            </span>
+            <div className="flex items-center gap-1">
+              <InfoTooltip 
+                title="Highest Token Consuming Employee"
+                description="Identifies the team member who utilized the highest volume of tokens along with their percentage share of total organization usage."
+              />
+              <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                <Zap className="w-3.5 h-3.5" />
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-2.5 flex items-baseline gap-1.5">
-          <span className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight">
-            {topConsumer ? `${topConsumer.percentage ?? 0}%` : '0%'}
-          </span>
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">of total tokens</span>
-        </div>
+          <div className="mt-2.5 flex items-baseline gap-1.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight">
+              {topConsumer ? `${topConsumer.percentage ?? 0}%` : '0%'}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">of total tokens</span>
+          </div>
 
-        <div className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300 truncate">
-          <span className="font-semibold truncate max-w-[120px]" title={topConsumer?.name || 'N/A'}>
-            {topConsumer ? topConsumer.name : 'No data'}
-          </span>
-          <span className="font-mono text-amber-600 dark:text-amber-400 font-bold ml-auto shrink-0">
-            {topConsumer ? `${(topConsumer.totalTokens ?? topConsumer.tokens ?? 0).toLocaleString()} tkn` : '0'}
-          </span>
+          <div className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300 truncate">
+            <span className="font-semibold truncate max-w-[120px]" title={topConsumer?.name || 'N/A'}>
+              {topConsumer ? topConsumer.name : 'No data'}
+            </span>
+            <span className="font-mono text-amber-600 dark:text-amber-400 font-bold ml-auto shrink-0">
+              {topConsumer ? `${(topConsumer.totalTokens ?? topConsumer.tokens ?? 0).toLocaleString()} tkn` : '0'}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
     </div>
   );

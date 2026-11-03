@@ -8,7 +8,6 @@ import ResolutionPieChart from './components/ResolutionPieChart';
 import TopTokenUsersCard from './components/TopTokenUsersCard';
 import AuditLogTable from './components/AuditLogTable';
 import QueryDetailModal from './components/QueryDetailModal';
-import SettingsModal from './components/SettingsModal';
 import TokenAccuracyExplainer from './components/TokenAccuracyExplainer';
 import { 
   getStoredConfig, 
@@ -20,10 +19,13 @@ import {
 import { EMPLOYEE_DIRECTORY } from './data/employeeDirectory';
 import { useAuth } from './context/AuthContext';
 import AuthPage from './components/auth/AuthPage';
-import { Bot, Loader2 } from 'lucide-react';
+import ForceResetPasswordModal from './components/auth/ForceResetPasswordModal';
+import AdminPortalModal from './components/admin/AdminPortalModal';
+import { Bot, Loader2, Code2, Users } from 'lucide-react';
 
 export default function App() {
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { isAuthenticated, user, isAdmin, mustResetPassword, isLoading: isAuthLoading } = useAuth();
+  const [isAdminPortalOpen, setIsAdminPortalOpen] = useState(false);
   const [config, setConfig] = useState(getStoredConfig());
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,13 +107,48 @@ export default function App() {
     return new Date();
   }, [dateRange.from, dateRange.to]);
 
+  // 1. Role-Based Access Control (RBAC) Scoping:
+  // - Administrator: Sees complete organization data across all employees
+  // - Technical / Member: Sees strictly the queries and tokens utilized by themselves
+  const userScopedLogs = useMemo(() => {
+    if (isAdmin) return logs;
+    const userFullName = (user?.full_name || user?.user_metadata?.full_name || user?.name || '').trim().toLowerCase();
+    const userEmail = (user?.email || '').trim().toLowerCase();
+    const usernamePart = userEmail.split('@')[0].toLowerCase();
+    
+    // Split user's name into word tokens (e.g. "Hanish Thatikonda" -> ["hanish", "thatikonda"])
+    const userParts = userFullName ? userFullName.split(/\s+/).filter(p => p.length >= 3) : [];
+
+    return logs.filter((item) => {
+      const logName = (item.name || item.user_name || item.NAME || item.EmployeeName || '').trim().toLowerCase();
+      const logEmail = (item.user_email || item.EMAIL || item.email || '').trim().toLowerCase();
+
+      // 1. Exact or substring match on full name
+      if (userFullName && logName) {
+        if (logName.includes(userFullName) || userFullName.includes(logName)) return true;
+        // Check if individual first/last name matches (e.g. "hanish" in "hanish thatikonda")
+        if (userParts.some(part => logName.includes(part))) return true;
+      }
+
+      // 2. Direct corporate email match
+      if (userEmail && logEmail && logEmail === userEmail) return true;
+
+      // 3. Username prefix match (e.g. "hanish" from "hanish@techygeekhub.com" matches "Hanish Thatikonda")
+      if (usernamePart && logName) {
+        if (logName.includes(usernamePart) || usernamePart.includes(logName)) return true;
+      }
+
+      return false;
+    });
+  }, [logs, isAdmin, user]);
+
   // Filter logs by preset or full calendar date range
   const filteredLogs = useMemo(() => {
-    if (!logs.length) return [];
+    if (!userScopedLogs.length) return [];
 
     // Full calendar From & To date range filter takes priority if active
     if (dateRange.from || dateRange.to) {
-      return logs.filter((item) => {
+      return userScopedLogs.filter((item) => {
         const itemDateStr = new Date(item.createdAt).toISOString().slice(0, 10);
         if (dateRange.from && dateRange.to) {
           return itemDateStr >= dateRange.from && itemDateStr <= dateRange.to;
@@ -126,14 +163,14 @@ export default function App() {
       });
     }
 
-    if (timePreset === 'all') return logs;
+    if (timePreset === 'all') return userScopedLogs;
 
     const ref = referenceDate;
     const refYear = ref.getFullYear();
     const refMonth = ref.getMonth();
     const refDate = ref.getDate();
 
-    return logs.filter((item) => {
+    return userScopedLogs.filter((item) => {
       const d = new Date(item.createdAt);
       const itemYear = d.getFullYear();
       const itemMonth = d.getMonth();
@@ -154,11 +191,11 @@ export default function App() {
       }
       return true;
     });
-  }, [logs, timePreset, dateRange, referenceDate]);
+  }, [userScopedLogs, timePreset, dateRange, referenceDate]);
 
   // Counts for all presets
   const countsByPreset = useMemo(() => {
-    if (!logs.length) return { today: 0, '7d': 0, month: 0, year: 0, all: 0 };
+    if (!userScopedLogs.length) return { today: 0, '7d': 0, month: 0, year: 0, all: 0 };
     const ref = referenceDate;
     const refYear = ref.getFullYear();
     const refMonth = ref.getMonth();
@@ -166,7 +203,7 @@ export default function App() {
 
     let today = 0, d7 = 0, month = 0, year = 0;
 
-    logs.forEach((item) => {
+    userScopedLogs.forEach((item) => {
       const d = new Date(item.createdAt);
       const itemYear = d.getFullYear();
       const itemMonth = d.getMonth();
@@ -582,7 +619,29 @@ export default function App() {
         grouped[dateKey].cost += (item.estimatedCostUsd || 0);
       });
 
-      return Object.values(grouped).sort((a, b) => a.timestamp - b.timestamp);
+      const resultList = Object.values(grouped).sort((a, b) => a.timestamp - b.timestamp);
+
+      // If only 1 day has activity (e.g. personal technical role data), pad adjacent days so AreaChart renders a smooth peak
+      if (resultList.length === 1) {
+        const singlePoint = resultList[0];
+        const centerDate = new Date(singlePoint.timestamp);
+
+        const prevDate = new Date(centerDate);
+        prevDate.setDate(prevDate.getDate() - 1);
+        const prevKey = prevDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        const nextDate = new Date(centerDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+        const nextKey = nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        return [
+          { date: prevKey, timestamp: prevDate.getTime(), total: 0, helpful: 0, notHelpful: 0, raiseTicket: 0, unrated: 0, sufficient: 0, insufficient: 0, promptTokens: 0, completionTokens: 0, cost: 0 },
+          singlePoint,
+          { date: nextKey, timestamp: nextDate.getTime(), total: 0, helpful: 0, notHelpful: 0, raiseTicket: 0, unrated: 0, sufficient: 0, insufficient: 0, promptTokens: 0, completionTokens: 0, cost: 0 },
+        ];
+      }
+
+      return resultList;
     }
   }, [filteredLogs, timePreset, dateRange, referenceDate]);
 
@@ -609,8 +668,10 @@ export default function App() {
     if (timePreset === 'year') {
       return `Year ${referenceDate.getFullYear()}`;
     }
-    return `All Recorded History (${logs.length} Queries)`;
-  }, [timePreset, dateRange, filteredLogs.length, referenceDate, logs.length]);
+    return isAdmin 
+      ? `All Recorded History (${logs.length} Queries)`
+      : `Personal History (${userScopedLogs.length} Queries)`;
+  }, [timePreset, dateRange, filteredLogs.length, referenceDate, logs.length, userScopedLogs.length, isAdmin]);
 
   const periodLabel = useMemo(() => {
     if (dateRange.from || dateRange.to) {
@@ -648,18 +709,36 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       
-      {/* 1. Header / Navbar with Theme Toggle */}
+      {/* 1. Header / Navbar with Theme Toggle & Admin Portal */}
       <Navbar
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        config={config}
-        isConnected={isConnected}
+        onOpenAdminPortal={() => setIsAdminPortalOpen(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
 
-      {/* 2. Main Dashboard Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {/* 2. Main Dashboard Content (Full Width Desktop Layout) */}
+      <main className="flex-1 w-full max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-6 space-y-6">
         
+        {/* Personal Scope Indicator for Technical Staff */}
+        {!isAdmin && (
+          <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-blue-700 dark:text-blue-300 animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold shrink-0">
+                <Code2 className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="font-bold">Technical Role Scope Active</div>
+                <p className="text-[11px] opacity-80 mt-0.5">
+                  Displaying strictly your personal questions and token telemetry for <strong>{user?.full_name || user?.email}</strong>.
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-xl bg-blue-500/15 border border-blue-500/30 text-xs font-bold font-mono">
+              {filteredLogs.length} Questions Found
+            </span>
+          </div>
+        )}
+
         {/* Top Controls: Time Presets & Calendar Date Range Picker */}
         <TimeFilter
           currentPreset={timePreset}
@@ -669,7 +748,7 @@ export default function App() {
           }}
           countsByPreset={countsByPreset}
           dateRangeSummary={dateRangeSummary}
-          totalLogsCount={logs.length}
+          totalLogsCount={userScopedLogs.length}
           dateRange={dateRange}
           onSelectDateRange={(dr) => {
             setDateRange(dr);
@@ -709,37 +788,35 @@ export default function App() {
           onSelectRow={setSelectedLog} 
         />
 
-        {/* 7. Employee Token Consumption (All 150 employees directory - Placed below Audit Log) */}
-        <TopTokenUsersCard 
-          employeeStats={employeeStats} 
-          totalOrgTokens={stats.totalTokens} 
-        />
+        {/* 7. Employee Token Consumption Directory (Strictly visible to Admin only) */}
+        {isAdmin && (
+          <TopTokenUsersCard 
+            employeeStats={employeeStats} 
+            totalOrgTokens={stats.totalTokens} 
+          />
+        )}
 
       </main>
 
-      {/* 8. Footer */}
+      {/* 8. Footer (Full Width) */}
       <footer className="border-t border-slate-200 dark:border-slate-900 bg-white/80 dark:bg-slate-950/80 py-4 text-center text-xs text-slate-500 transition-colors duration-200">
-        <p>
-          TGH HR Assistance Agent Analytics • Powered by n8n Workflow Automation & Google Gemini Flash
-        </p>
+        <div className="w-full max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12">
+          <p>
+            TGH HR Assistance Agent Analytics • Powered by n8n Workflow Automation & Google Gemini Flash
+          </p>
+        </div>
       </footer>
 
       {/* Modals */}
+      <AdminPortalModal
+        isOpen={isAdminPortalOpen}
+        onClose={() => setIsAdminPortalOpen(false)}
+      />
+      <ForceResetPasswordModal isOpen={mustResetPassword} />
       {selectedLog && (
         <QueryDetailModal
           log={selectedLog}
           onClose={() => setSelectedLog(null)}
-        />
-      )}
-
-      {isSettingsOpen && (
-        <SettingsModal
-          config={config}
-          onSaveConfig={(newConfig) => {
-            setConfig(newConfig);
-            saveConfig(newConfig);
-          }}
-          onClose={() => setIsSettingsOpen(false)}
         />
       )}
 

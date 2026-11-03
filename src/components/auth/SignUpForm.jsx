@@ -153,7 +153,7 @@ export default function SignUpForm({ onSwitchToLogin, onOpenSupabaseConfig }) {
             type="email"
             required
             autoComplete="email"
-            placeholder="yourname@techygeekhub.com"
+            placeholder="Enter corporate email (e.g. name@techygeekhub.com)"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all font-sans"
