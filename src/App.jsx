@@ -21,11 +21,13 @@ import { useAuth } from './context/AuthContext';
 import AuthPage from './components/auth/AuthPage';
 import ForceResetPasswordModal from './components/auth/ForceResetPasswordModal';
 import AdminPortalModal from './components/admin/AdminPortalModal';
-import { Bot, Loader2, Code2, Users } from 'lucide-react';
+import { checkAndDispatchQuotaAlerts } from './services/quotaService';
+import { Bot, Loader2, Code2, Users, Bell, AlertTriangle, X } from 'lucide-react';
 
 export default function App() {
   const { isAuthenticated, user, isAdmin, mustResetPassword, isLoading: isAuthLoading } = useAuth();
   const [isAdminPortalOpen, setIsAdminPortalOpen] = useState(false);
+  const [proactiveAlertNotice, setProactiveAlertNotice] = useState('');
   const [config, setConfig] = useState(getStoredConfig());
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,6 +72,14 @@ export default function App() {
     try {
       const data = await fetchAuditLogs(config);
       setLogs(data);
+
+      // Proactively check for daily message/token limit breaches & trigger Teams alerts
+      checkAndDispatchQuotaAlerts(data).then((triggered) => {
+        if (triggered && triggered.length > 0) {
+          const names = triggered.map(t => t.name).join(', ');
+          setProactiveAlertNotice(`⚠️ Teams Alert Sent: ${names} exceeded daily limits today. Check Admin Portal.`);
+        }
+      }).catch(() => {});
 
       if (config.apiKey && config.baseUrl) {
         try {
@@ -739,6 +749,37 @@ export default function App() {
           </div>
         )}
 
+        {/* Admin Proactive Quota Alert Notification Banner */}
+        {isAdmin && proactiveAlertNotice && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-200 animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="font-bold">Teams Quota Notification Dispatched</div>
+                <p className="text-[11px] opacity-90">{proactiveAlertNotice}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsAdminPortalOpen(true)}
+                className="px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold transition shadow-xs cursor-pointer"
+              >
+                Review in Admin Portal
+              </button>
+              <button
+                type="button"
+                onClick={() => setProactiveAlertNotice('')}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top Controls: Time Presets & Calendar Date Range Picker */}
         <TimeFilter
           currentPreset={timePreset}
@@ -811,6 +852,7 @@ export default function App() {
       <AdminPortalModal
         isOpen={isAdminPortalOpen}
         onClose={() => setIsAdminPortalOpen(false)}
+        logs={logs}
       />
       <ForceResetPasswordModal isOpen={mustResetPassword} />
       {selectedLog && (

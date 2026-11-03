@@ -115,14 +115,22 @@ function devApiPlugin() {
                   expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes expiry
                 });
 
-                // SMTP Sending attempt
+                // -----------------------------------------------------------------
+                // OTP EMAIL DISPATCH (Supports 1. n8n Webhook, 2. SMTP, 3. Resend)
+                // -----------------------------------------------------------------
                 const smtpUser = process.env.SMTP_USER;
                 const smtpPass = process.env.SMTP_PASS;
                 const smtpHost = process.env.SMTP_HOST || 'smtp.hostinger.com';
                 const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
                 const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
 
+                const n8nWebhook = process.env.N8N_OTP_WEBHOOK_URL || 'https://n8n.srv1901759.hstgr.cloud/webhook/send-otp-email';
+                const resendApiKey = process.env.RESEND_API_KEY;
+
                 let mailSent = false;
+                let deliveryMethod = 'none';
+
+                // Method 1: Direct SMTP (Hostinger / Gmail / Outlook)
                 if (smtpUser && smtpPass) {
                   try {
                     const transporter = nodemailer.createTransport({
@@ -156,16 +164,71 @@ function devApiPlugin() {
                       `
                     });
                     mailSent = true;
+                    deliveryMethod = 'smtp';
                     console.log(`[SMTP OTP] Sent 6-digit code to ${email}`);
                   } catch (err) {
                     console.error('[SMTP OTP Error]', err.message);
                   }
-                } else {
+                }
+
+                // Method 2: Resend REST API (if key provided)
+                if (!mailSent && resendApiKey) {
+                  try {
+                    const resendRes = await fetch('https://api.resend.com/emails', {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${resendApiKey}`,
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        from: process.env.RESEND_FROM || 'TGH Security <onboarding@resend.dev>',
+                        to: [email],
+                        subject: 'TGH HR Agent Analytics: Your 6-Digit OTP Code',
+                        html: `<h2>Your 6-Digit OTP: <strong>${otp}</strong></h2><p>Valid for 10 minutes.</p>`
+                      })
+                    });
+                    if (resendRes.ok) {
+                      mailSent = true;
+                      deliveryMethod = 'resend';
+                      console.log(`[Resend OTP] Sent 6-digit code to ${email}`);
+                    }
+                  } catch (err) {
+                    console.error('[Resend OTP Error]', err.message);
+                  }
+                }
+
+                // Method 3: n8n Webhook Dispatch (hits n8n which can send via Gmail/Outlook node)
+                if (!mailSent && n8nWebhook) {
+                  try {
+                    const n8nRes = await fetch(n8nWebhook, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        event: 'SEND_OTP',
+                        email,
+                        fullName: user.full_name,
+                        role: user.role,
+                        otp,
+                        expiresInMinutes: 10,
+                        timestamp: new Date().toISOString()
+                      })
+                    });
+                    if (n8nRes.ok) {
+                      mailSent = true;
+                      deliveryMethod = 'n8n_webhook';
+                      console.log(`[n8n OTP Webhook] Dispatched OTP payload for ${email} to n8n`);
+                    }
+                  } catch (err) {
+                    // n8n webhook might not be listening yet, ignore quietly
+                  }
+                }
+
+                if (!mailSent) {
                   console.log(`\n============================================================`);
                   console.log(`[TGH CORPORATE AUTHENTICATION OTP]`);
                   console.log(`Recipient: ${email} (${user.full_name} - ${user.role.toUpperCase()})`);
                   console.log(`>>> 6-DIGIT OTP CODE: ${otp} <<<`);
-                  console.log(`Valid for 10 minutes. (Configure SMTP in .env for real inbox delivery)`);
+                  console.log(`Valid for 10 minutes. (Configure SMTP or n8n in .env for real delivery)`);
                   console.log(`============================================================\n`);
                 }
 
@@ -174,6 +237,7 @@ function devApiPlugin() {
                   message: `A 6-digit verification code has been dispatched to ${email}.`,
                   email,
                   mail_sent: mailSent,
+                  delivery_method: deliveryMethod,
                   dev_otp: !mailSent ? otp : undefined,
                 }));
                 return;

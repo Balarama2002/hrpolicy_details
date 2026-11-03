@@ -60,3 +60,15 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
   background-color: rgba(59, 130, 246, 0.15);
 }
+
+
+/* Hide native browser number input spinners so custom steppers render cleanly without duplicate bars */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
