@@ -20,3 +20,9 @@ CREATE TABLE IF NOT EXISTS `user_information` (
   INDEX `idx_email` (`email`),
   INDEX `idx_department` (`department`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Pre-seeded dummy/default accounts (Password: Password123!)
+INSERT IGNORE INTO `user_information` (`email`, `full_name`, `department`, `password_hash`, `role`)
+VALUES 
+  ('admin@techygeekhub.com', 'HR Administrator', 'Human Resources (HR)', '$2b$10$P0SrIvmdY5wHRDHraHM4iOHIfFV94iuXLBp/YhLulxdm/LiAXnH2m', 'admin'),
+  ('demo@techygeekhub.com', 'TechyGeekHub Demo', 'Engineering & IT', '$2b$10$P0SrIvmdY5wHRDHraHM4iOHIfFV94iuXLBp/YhLulxdm/LiAXnH2m', 'employee');

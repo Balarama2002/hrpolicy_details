@@ -66,6 +66,20 @@ async function initDatabase() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
       console.log('[DB] Table `user_information` verified and ready.');
+
+      // Auto-seed default accounts if table is empty
+      const [countRows] = await connection.query('SELECT COUNT(*) as total FROM user_information');
+      if (countRows[0].total === 0) {
+        const defaultHash = '$2b$10$P0SrIvmdY5wHRDHraHM4iOHIfFV94iuXLBp/YhLulxdm/LiAXnH2m'; // 'Password123!'
+        await connection.query(`
+          INSERT INTO user_information (email, full_name, department, password_hash, role)
+          VALUES 
+            ('admin@techygeekhub.com', 'HR Administrator', 'Human Resources (HR)', ?, 'admin'),
+            ('demo@techygeekhub.com', 'TechyGeekHub Demo', 'Engineering & IT', ?, 'employee')
+        `, [defaultHash, defaultHash]);
+        console.log('[DB] Pre-seeded default accounts: admin@techygeekhub.com and demo@techygeekhub.com (Password: Password123!)');
+      }
+
       connection.release();
       return;
     } catch (err) {
