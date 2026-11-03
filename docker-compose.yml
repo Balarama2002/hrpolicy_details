@@ -54,6 +54,7 @@ services:
       - "${APP_PORT:-3000}:3000"
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=tgh_hr_network"
       - "traefik.http.routers.hragent.entrypoints=web,websecure"
       - "traefik.http.routers.hragent.rule=Host(`${DOMAIN_NAME:-hr-agent.srv1901759.hstgr.cloud}`)"
       - "traefik.http.routers.hragent.tls=true"
