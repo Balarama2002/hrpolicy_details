@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { Bot, Sun, Moon, Database, Shield } from 'lucide-react';
+import { Bot, Sun, Moon, Database, Shield, Server } from 'lucide-react';
 import LoginForm from './LoginForm';
 import SignUpForm from './SignUpForm';
-import SupabaseConfigModal from './SupabaseConfigModal';
+import DatabaseConfigModal from './DatabaseConfigModal';
 import { useAuth } from '../../context/AuthContext';
 
 export default function AuthPage({ theme = 'dark', onToggleTheme }) {
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'signup'
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const { isConfigured } = useAuth();
+  const { authProvider, dbStatus } = useAuth();
   const isDark = theme === 'dark';
 
   return (
@@ -18,19 +18,15 @@ export default function AuthPage({ theme = 'dark', onToggleTheme }) {
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 dark:bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-500/10 dark:bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Bar with Theme Toggle & Supabase Status */}
+      {/* Top Bar with Theme Toggle & Hostinger DB Status */}
       <div className="absolute top-4 right-4 flex items-center gap-2.5 z-20">
         <button
           onClick={() => setIsConfigModalOpen(true)}
-          className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
-            isConfigured
-              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-              : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20 animate-pulse'
-          }`}
-          title="Configure Supabase Project Credentials"
+          className="px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
+          title="Database Details & Setup"
         >
-          <Database className="w-3.5 h-3.5" />
-          <span>{isConfigured ? 'Supabase Connected' : 'Setup Supabase'}</span>
+          <Server className="w-3.5 h-3.5 text-blue-500" />
+          <span>{authProvider === 'hostinger' ? 'Hostinger MySQL' : 'Supabase Cloud'}</span>
         </button>
 
         <button
@@ -104,13 +100,13 @@ export default function AuthPage({ theme = 'dark', onToggleTheme }) {
 
         {/* Security badge footer */}
         <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
-          <Shield className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Secured with Supabase Authentication & Role Access</span>
+          <Shield className="w-3.5 h-3.5 text-blue-500" />
+          <span>Hostinger Database • Bcrypt Hashed • @techygeekhub.com Restricted</span>
         </div>
       </div>
 
-      {/* Supabase Config Modal */}
-      <SupabaseConfigModal 
+      {/* Database Setup & Config Modal */}
+      <DatabaseConfigModal 
         isOpen={isConfigModalOpen} 
         onClose={() => setIsConfigModalOpen(false)} 
       />

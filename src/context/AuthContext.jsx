@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { hostingerAuthService } from '../services/hostingerAuthService';
 import { 
   getSupabaseClient, 
   isSupabaseConfigured, 
@@ -6,7 +7,6 @@ import {
   getSupabaseConfig 
 } from '../services/supabaseClient';
 import { validateCompanyEmail } from '../utils/validation';
-import { syncUserInformation } from '../services/userService';
 
 const AuthContext = createContext(null);
 
@@ -14,151 +14,146 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isConfigured, setIsConfigured] = useState(isSupabaseConfigured());
-  const [config, setConfig] = useState(getSupabaseConfig());
+  const [authProvider, setAuthProvider] = useState('hostinger'); // 'hostinger' | 'supabase'
+  const [dbStatus, setDbStatus] = useState({
+    connected: true,
+    host: 'localhost',
+    dbName: 'Hostinger MySQL',
+    tableExists: true,
+    isChecking: false,
+  });
 
-  // Initialize session and auth listener
+  // Supabase fallback config state
+  const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseConfig());
+
+  // Check DB status on mount
+  const checkDatabaseStatus = useCallback(async () => {
+    setDbStatus(prev => ({ ...prev, isChecking: true }));
+    try {
+      const res = await hostingerAuthService.testConnection();
+      setDbStatus({
+        connected: res.connected !== false,
+        host: res.database_host || 'localhost',
+        dbName: res.database_name || 'Hostinger MySQL',
+        tableExists: res.table_exists !== false,
+        isChecking: false,
+      });
+    } catch (err) {
+      setDbStatus(prev => ({ ...prev, connected: false, isChecking: false }));
+    }
+  }, []);
+
+  // Initialize session on mount
   useEffect(() => {
-    let authListener = null;
-
     const initAuth = async () => {
       setIsLoading(true);
-      const client = getSupabaseClient();
 
-      if (!client) {
-        setUser(null);
-        setSession(null);
-        setIsLoading(false);
-        setIsConfigured(false);
-        return;
+      // 1. Check cached Hostinger session
+      const cached = hostingerAuthService.getSession();
+      if (cached && cached.user) {
+        const u = cached.user;
+        setUser({
+          ...u,
+          user_metadata: {
+            full_name: u.full_name || u.name || '',
+            department: u.department || 'Human Resources (HR)',
+          },
+        });
+        setSession(cached);
       }
 
-      setIsConfigured(true);
+      // 2. Test Hostinger database status
+      await checkDatabaseStatus();
 
-      try {
-        const { data: { session: initialSession }, error } = await client.auth.getSession();
-        if (error) {
-          console.warn('Error fetching Supabase session:', error.message);
-        }
-        setSession(initialSession);
-        setUser(initialSession?.user ?? null);
-      } catch (err) {
-        console.error('Unexpected auth init error:', err);
-      } finally {
-        setIsLoading(false);
-      }
-
-      const { data: { subscription } } = client.auth.onAuthStateChange((_event, currentSession) => {
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
-        setIsLoading(false);
-      });
-
-      authListener = subscription;
+      setIsLoading(false);
     };
 
     initAuth();
+  }, [checkDatabaseStatus]);
 
-    return () => {
-      if (authListener?.unsubscribe) {
-        authListener.unsubscribe();
-      }
-    };
-  }, [config]);
-
-  // Update Supabase configuration from UI
-  const updateConfig = useCallback((url, anonKey) => {
-    saveSupabaseConfig(url, anonKey);
-    setConfig({ url, anonKey });
-    setIsConfigured(isSupabaseConfigured());
-  }, []);
-
-  // Sign in with email and password
+  // Sign In using Hostinger MySQL database
   const signIn = useCallback(async (email, password) => {
-    const client = getSupabaseClient();
-    if (!client) {
-      throw new Error('Supabase is not configured yet. Please enter your Supabase Project URL and Anon Key.');
-    }
-
     const cleanEmail = email.trim().toLowerCase();
     const domainError = validateCompanyEmail(cleanEmail);
     if (domainError) {
       throw new Error(domainError);
     }
 
-    const { data, error } = await client.auth.signInWithPassword({
-      email: cleanEmail,
-      password,
-    });
-
-    if (error) throw error;
-    setUser(data.user);
-    setSession(data.session);
-
-    // Record login activity in 'User information' table
-    syncUserInformation({
-      user: data.user,
-      email: cleanEmail,
-      isLogin: true,
-    }).catch((err) => console.warn('Background sync on login warning:', err));
-
-    return data;
-  }, []);
-
-  // Sign up with email, password, and metadata (full name, department)
-  const signUp = useCallback(async (email, password, { fullName, department } = {}) => {
-    const client = getSupabaseClient();
-    if (!client) {
-      throw new Error('Supabase is not configured yet. Please enter your Supabase Project URL and Anon Key.');
-    }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const domainError = validateCompanyEmail(cleanEmail);
-    if (domainError) {
-      throw new Error(domainError);
-    }
-
-    // 1. Register user with Supabase Auth (passwords are bcrypt encrypted in auth.users)
-    const { data, error } = await client.auth.signUp({
-      email: cleanEmail,
-      password,
-      options: {
-        data: {
-          full_name: fullName?.trim() || '',
-          department: department?.trim() || '',
-        },
-      },
-    });
-
-    if (error) throw error;
-
-    if (data.session) {
+    if (authProvider === 'supabase' && isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Supabase not configured');
+      const { data, error } = await client.auth.signInWithPassword({ email: cleanEmail, password });
+      if (error) throw error;
       setUser(data.user);
       setSession(data.session);
+      return data;
     }
 
-    // 2. Sync profile into 'User information' table with cryptographically hashed password
-    syncUserInformation({
-      user: data.user,
-      email: cleanEmail,
-      password,
-      fullName,
-      department,
-      isLogin: false,
-    }).catch((err) => console.warn('Background sync on signup warning:', err));
+    // Default: Hostinger MySQL Database
+    const res = await hostingerAuthService.signIn(cleanEmail, password);
+    const u = res.user;
+    const formattedUser = {
+      ...u,
+      user_metadata: {
+        full_name: u.full_name || u.name || '',
+        department: u.department || 'Human Resources (HR)',
+      },
+    };
+    setUser(formattedUser);
+    setSession({ user: formattedUser, token: res.token });
+    return res;
+  }, [authProvider]);
 
-    return data;
-  }, []);
+  // Sign Up and save to Hostinger MySQL table `user_information`
+  const signUp = useCallback(async (email, password, { fullName, department } = {}) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const domainError = validateCompanyEmail(cleanEmail);
+    if (domainError) {
+      throw new Error(domainError);
+    }
 
-  // Sign out
+    if (authProvider === 'supabase' && isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Supabase not configured');
+      const { data, error } = await client.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          data: {
+            full_name: fullName?.trim() || '',
+            department: department?.trim() || '',
+          },
+        },
+      });
+      if (error) throw error;
+      if (data.session) {
+        setUser(data.user);
+        setSession(data.session);
+      }
+      return data;
+    }
+
+    // Default: Hostinger MySQL Database
+    const res = await hostingerAuthService.signUp(cleanEmail, password, { fullName, department });
+    const u = res.user;
+    const formattedUser = {
+      ...u,
+      user_metadata: {
+        full_name: u.full_name || u.name || '',
+        department: u.department || 'Human Resources (HR)',
+      },
+    };
+    setUser(formattedUser);
+    setSession({ user: formattedUser, token: res.token });
+    return res;
+  }, [authProvider]);
+
+  // Sign Out
   const signOut = useCallback(async () => {
+    hostingerAuthService.clearSession();
     const client = getSupabaseClient();
     if (client) {
-      try {
-        await client.auth.signOut();
-      } catch (err) {
-        console.warn('Sign out warning:', err.message);
-      }
+      try { await client.auth.signOut(); } catch (e) { /* ignore */ }
     }
     setUser(null);
     setSession(null);
@@ -166,13 +161,25 @@ export function AuthProvider({ children }) {
 
   // Password Reset
   const resetPassword = useCallback(async (email) => {
-    const client = getSupabaseClient();
-    if (!client) throw new Error('Supabase is not configured.');
+    const cleanEmail = email.trim().toLowerCase();
+    const domainError = validateCompanyEmail(cleanEmail);
+    if (domainError) {
+      throw new Error(domainError);
+    }
 
-    const { error } = await client.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: window.location.origin,
-    });
-    if (error) throw error;
+    if (authProvider === 'supabase' && isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Supabase not configured');
+      return await client.auth.resetPasswordForEmail(cleanEmail);
+    }
+
+    return await hostingerAuthService.resetPassword(cleanEmail);
+  }, [authProvider]);
+
+  // Update Supabase configuration if user switches to Supabase mode
+  const updateConfig = useCallback((url, anonKey) => {
+    saveSupabaseConfig(url, anonKey);
+    setSupabaseConfig({ url, anonKey });
   }, []);
 
   const value = {
@@ -180,8 +187,12 @@ export function AuthProvider({ children }) {
     session,
     isAuthenticated: Boolean(user),
     isLoading,
-    isConfigured,
-    config,
+    authProvider,
+    setAuthProvider,
+    dbStatus,
+    checkDatabaseStatus,
+    isConfigured: true, // Hostinger DB is primary and configured
+    config: supabaseConfig,
     updateConfig,
     signIn,
     signUp,

@@ -78,10 +78,9 @@ export default function SignUpForm({ onSwitchToLogin, onOpenSupabaseConfig }) {
         department,
       });
 
-      // If Supabase has email confirmation enabled
       if (data.user && !data.session) {
         setSuccessMessage(
-          'Registration successful! Supabase sent a verification email. Please check your inbox and click the confirmation link before signing in.'
+          'Registration successful! You can now sign in with your credentials.'
         );
       } else {
         setSuccessMessage('Registration successful! Redirecting to analytics dashboard...');
