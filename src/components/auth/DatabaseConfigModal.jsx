@@ -112,27 +112,27 @@ export default function DatabaseConfigModal({ isOpen, onClose }) {
               <div className="flex items-center justify-between">
                 <span className="font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-blue-500" />
-                  Self-Hosted on Hostinger
+                  Self-Hosted Hostinger VPS Container
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                  Native Hostinger Database
+                  Docker Stack Ready
                 </span>
               </div>
               <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-[11px]">
-                Your user credentials and authentication data are stored directly inside your own Hostinger MySQL database in the <code className="font-mono text-blue-600 dark:text-blue-400">user_information</code> table. Passwords are encrypted with industry-standard <strong>Bcrypt</strong>.
+                Your user credentials and authentication data are stored inside your Hostinger VPS Docker container in the <code className="font-mono text-blue-600 dark:text-blue-400">user_information</code> table. Passwords are cryptographically encrypted with <strong>Bcrypt</strong>.
               </p>
             </div>
 
-            {/* Diagnostics and Setup */}
+            {/* Diagnostics and Container Info */}
             <div className="space-y-2">
               <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Hostinger Database Settings (in <code className="text-blue-500">public_html/api/db.php</code>):
+                Hostinger VPS Docker Architecture:
               </div>
               <div className="p-3.5 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] space-y-1">
-                <div><span className="text-slate-500">DB_HOST:</span> 'localhost'</div>
-                <div><span className="text-slate-500">DB_NAME:</span> 'u123456789_hragent' (from Hostinger hPanel)</div>
-                <div><span className="text-slate-500">DB_USER:</span> 'u123456789_hruser'</div>
-                <div><span className="text-slate-500">DB_PASS:</span> 'YourHostingerPassword'</div>
+                <div><span className="text-blue-400">Database Container:</span> mysql:8.0 (service: db)</div>
+                <div><span className="text-blue-400">App Container:</span> tgh_hr_agent_ui (Express + React SPA)</div>
+                <div><span className="text-blue-400">Volume Storage:</span> tgh_hr_mysql_data (persistent)</div>
+                <div><span className="text-blue-400">Deploy Command:</span> docker compose up -d --build</div>
               </div>
             </div>
 
