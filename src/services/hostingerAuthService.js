@@ -1,15 +1,75 @@
 /**
  * Hostinger MySQL & OTP Authentication Service for TechyGeekHub
- * Connects directly to the backend (/api/auth.php or /api/auth)
+ * Connects directly to the backend (/api/auth.php or configured Hostinger VPS URL)
  */
 
 import { validateCompanyEmail } from '../utils/validation';
 
 const SESSION_STORAGE_KEY = 'tgh_hostinger_user_session';
+const BACKEND_URL_KEY = 'tgh_hostinger_backend_url';
+
+export function getBackendBaseUrl() {
+  return (
+    localStorage.getItem(BACKEND_URL_KEY) ||
+    import.meta.env.VITE_HOSTINGER_API_URL ||
+    '/api/auth.php'
+  );
+}
+
+export function setBackendBaseUrl(url) {
+  if (url) {
+    localStorage.setItem(BACKEND_URL_KEY, url.trim());
+  } else {
+    localStorage.removeItem(BACKEND_URL_KEY);
+  }
+}
 
 function getApiEndpoint(action) {
-  const base = import.meta.env.VITE_HOSTINGER_API_URL || '/api/auth.php';
-  return `${base}?action=${encodeURIComponent(action)}`;
+  const base = getBackendBaseUrl();
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}action=${encodeURIComponent(action)}`;
+}
+
+/**
+ * Robust JSON request helper that catches non-JSON/404 responses from static hosts
+ */
+async function requestApi(action, options = {}) {
+  const url = getApiEndpoint(action);
+  let response;
+
+  try {
+    response = await fetch(url, options);
+  } catch (networkErr) {
+    throw new Error(
+      `Network Error: Cannot connect to backend API at "${url}". Ensure your Hostinger server or local dev server is running.`
+    );
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  let data;
+
+  if (contentType.includes('application/json')) {
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      throw new Error('Malformed JSON received from backend API.');
+    }
+  } else {
+    const raw = await response.text();
+    // Static host or 404 handler
+    if (response.status === 404 || raw.includes('<!DOCTYPE') || raw.includes('<html')) {
+      throw new Error(
+        `Backend API not available on this domain (${response.status}). Static hosts like GitHub Pages do not execute PHP/Node. Pull this repository to your Hostinger server where PHP and MySQL are active.`
+      );
+    }
+    throw new Error(`Unexpected response (${response.status}): ${raw.slice(0, 120)}`);
+  }
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || `Request failed with status ${response.status}`);
+  }
+
+  return data;
 }
 
 export const hostingerAuthService = {
@@ -68,18 +128,11 @@ export const hostingerAuthService = {
       throw new Error(domainErr);
     }
 
-    const response = await fetch(getApiEndpoint('send-otp'), {
+    return await requestApi('send-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: clean }),
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Failed to send OTP code.');
-    }
-
-    return data;
   },
 
   /**
@@ -98,16 +151,11 @@ export const hostingerAuthService = {
       throw new Error('Please enter a valid 6-digit OTP code.');
     }
 
-    const response = await fetch(getApiEndpoint('verify-otp'), {
+    const data = await requestApi('verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: cleanEmail, otp: cleanOtp }),
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Invalid or expired OTP code.');
-    }
 
     this.setSession(data.user, data.token);
     return data;
@@ -121,16 +169,11 @@ export const hostingerAuthService = {
     const domainErr = validateCompanyEmail(cleanEmail);
     if (domainErr) throw new Error(domainErr);
 
-    const response = await fetch(getApiEndpoint('login'), {
+    const data = await requestApi('login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: cleanEmail, password }),
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Failed to authenticate.');
-    }
 
     this.setSession(data.user, data.token);
     return data;
@@ -140,67 +183,44 @@ export const hostingerAuthService = {
    * ADMIN PORTAL: Lists all provisioned users
    */
   async listUsers() {
-    const response = await fetch(getApiEndpoint('list-users'), {
+    return await requestApi('list-users', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Failed to retrieve user list.');
-    }
-
-    return data.users || [];
   },
 
   /**
    * ADMIN PORTAL: Provisions a new corporate user
-   * @param {Object} userData - { email, full_name, role, department }
+   * @param {Object} userData 
    */
   async addUser(userData) {
-    let cleanEmail = (userData.email || '').trim().toLowerCase();
-    if (!cleanEmail.includes('@')) {
-      cleanEmail = `${cleanEmail}@techygeekhub.com`;
-    }
-
-    const domainErr = validateCompanyEmail(cleanEmail);
+    const email = (userData.email || '').trim().toLowerCase();
+    const domainErr = validateCompanyEmail(email);
     if (domainErr) throw new Error(domainErr);
 
-    const response = await fetch(getApiEndpoint('add-user'), {
+    return await requestApi('add-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ...userData,
-        email: cleanEmail,
+        email,
+        full_name: userData.full_name || userData.fullName,
+        department: userData.department || 'Engineering & IT',
+        role: userData.role || 'technical',
       }),
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Failed to provision user.');
-    }
-
-    return data.user;
   },
 
   /**
-   * ADMIN PORTAL: Updates a user's role ('admin' vs 'technical')
+   * ADMIN PORTAL: Updates role of an existing employee (admin vs technical)
    * @param {string} email 
-   * @param {string} role 
+   * @param {'admin'|'technical'} role 
    */
   async updateUserRole(email, role) {
-    const response = await fetch(getApiEndpoint('update-user-role'), {
+    return await requestApi('update-user-role', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role }),
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Failed to update user role.');
-    }
-
-    return data;
   },
 
   /**
@@ -208,18 +228,11 @@ export const hostingerAuthService = {
    * @param {string} email 
    */
   async deleteUser(email) {
-    const response = await fetch(getApiEndpoint('delete-user'), {
+    return await requestApi('delete-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Failed to delete user.');
-    }
-
-    return data;
   },
 
   /**

@@ -1,11 +1,12 @@
 <?php
 /**
- * TechyGeekHub HR Agent - Hostinger Authentication API
+ * TechyGeekHub HR Agent - Hostinger Authentication & Admin API
  * 
  * Handles:
- * - User Registration (with Bcrypt password hashing & @techygeekhub.com verification)
- * - User Login (with Bcrypt verification & last_login recording)
- * - Password Reset
+ * - 6-Digit OTP Dispatch (`action=send-otp`) via n8n Webhook & Hostinger Mail
+ * - 6-Digit OTP Verification (`action=verify-otp`)
+ * - Admin Portal User Management (`action=list-users`, `add-user`, `update-user-role`, `delete-user`)
+ * - Backward Compatibility: `login`, `signup`, `reset-password`
  */
 
 require_once __DIR__ . '/db.php';
@@ -30,191 +31,107 @@ function isValidCompanyEmail($email, $domain) {
 }
 
 /**
- * Generates a simple secure random session token
+ * Generates secure session token
  */
 function generateToken($userId, $email) {
     return bin2hex(random_bytes(24)) . '.' . base64_encode($userId . ':' . time());
 }
 
-// -----------------------------------------------------------------------------
-// ACTION: SIGNUP
-// -----------------------------------------------------------------------------
-if ($action === 'signup') {
-    $email      = strtolower(trim($inputData['email'] ?? ''));
-    $password   = $inputData['password'] ?? '';
-    $fullName   = trim($inputData['fullName'] ?? ($inputData['full_name'] ?? ''));
-    $department = trim($inputData['department'] ?? 'Human Resources (HR)');
-
-    if (empty($email) || empty($password) || empty($fullName)) {
-        http_response_code(400);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'Please complete all required fields (Full Name, Work Email, and Password).'
-        ]);
-        exit();
-    }
-
-    // Corporate domain enforcement
-    if (!isValidCompanyEmail($email, $COMPANY_DOMAIN)) {
-        http_response_code(403);
-        echo json_encode([
-            'success' => false,
-            'error'   => "Access restricted: Only official company email addresses ({$COMPANY_DOMAIN}) are allowed. Please use your corporate email ID."
-        ]);
-        exit();
-    }
-
-    // Password strength check
-    if (strlen($password) < 6) {
-        http_response_code(400);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'Password must be at least 6 characters long.'
-        ]);
-        exit();
-    }
-
-    $pdo = getDbConnection();
-
-    // Check for existing account
-    $checkStmt = $pdo->prepare('SELECT id FROM user_information WHERE email = :email LIMIT 1');
-    $checkStmt->execute([':email' => $email]);
-    if ($checkStmt->fetch()) {
-        http_response_code(409);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'An account with this email already exists. Please sign in instead.'
-        ]);
-        exit();
-    }
-
-    // Encrypt password using industry-standard BCRYPT
-    $passwordHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-
+/**
+ * Auto-ensures required columns exist in user_information table
+ */
+function ensureSchemaAndSeed($pdo) {
     try {
-        $insertStmt = $pdo->prepare('
-            INSERT INTO user_information (email, full_name, department, password_hash, created_at, updated_at, last_login)
-            VALUES (:email, :full_name, :department, :password_hash, NOW(), NOW(), NOW())
-        ');
-        $insertStmt->execute([
-            ':email'         => $email,
-            ':full_name'     => $fullName,
-            ':department'    => $department,
-            ':password_hash' => $passwordHash,
-        ]);
+        $cols = $pdo->query("SHOW COLUMNS FROM `user_information`")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('role', $cols)) {
+            $pdo->exec("ALTER TABLE `user_information` ADD COLUMN `role` VARCHAR(50) DEFAULT 'technical'");
+        }
+        if (!in_array('otp_code', $cols)) {
+            $pdo->exec("ALTER TABLE `user_information` ADD COLUMN `otp_code` VARCHAR(10) NULL");
+        }
+        if (!in_array('otp_expires_at', $cols)) {
+            $pdo->exec("ALTER TABLE `user_information` ADD COLUMN `otp_expires_at` DATETIME NULL");
+        }
 
-        $userId = $pdo->lastInsertId();
-        $token  = generateToken($userId, $email);
-
-        $userData = [
-            'id'         => (string)$userId,
-            'email'      => $email,
-            'full_name'  => $fullName,
-            'department' => $department,
-            'created_at' => date('c'),
-            'last_login' => date('c'),
-        ];
-
-        echo json_encode([
-            'success' => true,
-            'message' => 'Registration successful! Welcome to TGH HR Agent Analytics.',
-            'user'    => $userData,
-            'token'   => $token,
-        ]);
-        exit();
-    } catch (PDOException $e) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'Database error while registering account: ' . $e->getMessage()
-        ]);
-        exit();
+        // Seed default corporate accounts if table is empty
+        $count = (int)$pdo->query("SELECT COUNT(*) FROM `user_information`")->fetchColumn();
+        if ($count === 0) {
+            $defaultHash = password_hash('TechyGeekHub2026!', PASSWORD_BCRYPT);
+            $stmt = $pdo->prepare("INSERT INTO `user_information` (email, full_name, department, role, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())");
+            $stmt->execute(['cbala@techygeekhub.com', 'Cherukuri Bala Rama Krishna', 'Engineering & IT', 'admin', $defaultHash]);
+            $stmt->execute(['hanish@techygeekhub.com', 'Hanish', 'Engineering & IT', 'technical', $defaultHash]);
+        }
+    } catch (Exception $e) {
+        // Schema check failed or already updated
     }
 }
 
-// -----------------------------------------------------------------------------
-// ACTION: LOGIN
-// -----------------------------------------------------------------------------
-if ($action === 'login') {
-    $email    = strtolower(trim($inputData['email'] ?? ''));
-    $password = $inputData['password'] ?? '';
-
-    if (empty($email) || empty($password)) {
-        http_response_code(400);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'Please enter both your work email and password.'
-        ]);
-        exit();
-    }
-
-    // Corporate domain enforcement
-    if (!isValidCompanyEmail($email, $COMPANY_DOMAIN)) {
-        http_response_code(403);
-        echo json_encode([
-            'success' => false,
-            'error'   => "Access restricted: Only official company email addresses ({$COMPANY_DOMAIN}) are allowed. Please use your corporate email ID."
-        ]);
-        exit();
-    }
-
-    $pdo = getDbConnection();
-
-    $stmt = $pdo->prepare('SELECT id, email, full_name, department, password_hash, is_active FROM user_information WHERE email = :email LIMIT 1');
-    $stmt->execute([':email' => $email]);
-    $user = $stmt->fetch();
-
-    if (!$user) {
-        http_response_code(401);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'Invalid email or password. Please verify your credentials or sign up.'
-        ]);
-        exit();
-    }
-
-    // Verify encrypted Bcrypt password
-    if (!password_verify($password, $user['password_hash'])) {
-        http_response_code(401);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'Invalid email or password. Please verify your credentials.'
-        ]);
-        exit();
-    }
-
-    // Update last_login timestamp in Hostinger DB
-    $updateStmt = $pdo->prepare('UPDATE user_information SET last_login = NOW() WHERE id = :id');
-    $updateStmt->execute([':id' => $user['id']]);
-
-    $token = generateToken($user['id'], $user['email']);
-
-    $userData = [
-        'id'         => (string)$user['id'],
-        'email'      => $user['email'],
-        'full_name'  => $user['full_name'],
-        'department' => $user['department'],
-        'last_login' => date('c'),
-    ];
-
-    echo json_encode([
-        'success' => true,
-        'message' => 'Login successful',
-        'user'    => $userData,
-        'token'   => $token,
+/**
+ * Sends OTP via n8n Webhook or fallback PHP mail()
+ */
+function dispatchOtpNotification($email, $fullName, $role, $otp) {
+    $n8nWebhook = getenv('N8N_OTP_WEBHOOK_URL') ?: 'https://n8n.srv1901759.hstgr.cloud/webhook/send-otp-email';
+    
+    $payload = json_encode([
+        'event'            => 'SEND_OTP',
+        'email'            => $email,
+        'fullName'         => $fullName,
+        'role'             => $role,
+        'otp'              => $otp,
+        'expiresInMinutes' => 10,
+        'timestamp'        => date('c')
     ]);
-    exit();
+
+    // Method 1: Try n8n webhook
+    if (function_exists('curl_init')) {
+        $ch = curl_init($n8nWebhook);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Content-Length: ' . strlen($payload)]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 4);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code >= 200 && $code < 300) {
+            return true;
+        }
+    }
+
+    // Method 2: Standard PHP mail() on Hostinger
+    $subject = "TGH HR Agent Analytics: Your 6-Digit OTP Code";
+    $headers = "From: TGH IT Security <no-reply@techygeekhub.com>\r\n";
+    $headers .= "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $html = "
+      <div style='font-family: Arial, sans-serif; max-width: 500px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;'>
+        <h2 style='color: #1e293b; margin-top:0;'>TechyGeekHub Authentication</h2>
+        <p>Hello <strong>" . htmlspecialchars($fullName) . "</strong>,</p>
+        <p>Your 6-digit corporate verification code is:</p>
+        <div style='background: #f1f5f9; padding: 16px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #2563eb; border-radius: 8px;'>
+          {$otp}
+        </div>
+        <p style='color: #64748b; font-size: 12px; margin-top: 16px;'>This code is valid for 10 minutes. If you did not request this, please contact IT Security.</p>
+      </div>
+    ";
+    @mail($email, $subject, $html, $headers);
+    return true;
 }
 
+$pdo = getDbConnection();
+ensureSchemaAndSeed($pdo);
+
 // -----------------------------------------------------------------------------
-// ACTION: FORGOT / RESET PASSWORD
+// ACTION: SEND-OTP
 // -----------------------------------------------------------------------------
-if ($action === 'reset-password') {
+if ($action === 'send-otp') {
     $email = strtolower(trim($inputData['email'] ?? ''));
 
     if (empty($email)) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Work email address is required.']);
+        echo json_encode(['success' => false, 'error' => 'Corporate email is required.']);
         exit();
     }
 
@@ -227,14 +144,229 @@ if ($action === 'reset-password') {
         exit();
     }
 
-    $pdo = getDbConnection();
-    $stmt = $pdo->prepare('SELECT id FROM user_information WHERE email = :email LIMIT 1');
+    // Verify employee was provisioned in user_information
+    $stmt = $pdo->prepare('SELECT id, full_name, email, role FROM user_information WHERE email = :email LIMIT 1');
     $stmt->execute([':email' => $email]);
+    $user = $stmt->fetch();
 
-    // For security reasons, always return positive response even if email doesn't exist
+    if (!$user) {
+        http_response_code(404);
+        echo json_encode([
+            'success' => false,
+            'error'   => "Access Denied: Account not found for {$email}. Access is strictly restricted to employees provisioned by an Administrator in the Admin Portal."
+        ]);
+        exit();
+    }
+
+    // Generate 6-digit numeric OTP code
+    $otp = (string)random_int(100000, 999999);
+
+    // Save OTP to database with 10-minute expiry
+    $updateStmt = $pdo->prepare('UPDATE user_information SET otp_code = :otp, otp_expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE id = :id');
+    $updateStmt->execute([
+        ':otp' => $otp,
+        ':id'  => $user['id']
+    ]);
+
+    // Dispatch email notification
+    dispatchOtpNotification($email, $user['full_name'], $user['role'] ?? 'technical', $otp);
+
     echo json_encode([
         'success' => true,
-        'message' => "If an account exists for {$email}, a password reset verification email has been requested. Contact your IT administrator if you need immediate assistance."
+        'message' => "A 6-digit verification code has been dispatched to {$email}.",
+        'email'   => $email
+    ]);
+    exit();
+}
+
+// -----------------------------------------------------------------------------
+// ACTION: VERIFY-OTP
+// -----------------------------------------------------------------------------
+if ($action === 'verify-otp') {
+    $email = strtolower(trim($inputData['email'] ?? ''));
+    $otp   = trim($inputData['otp'] ?? '');
+
+    if (empty($email) || empty($otp)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Corporate email and 6-digit OTP code are required.']);
+        exit();
+    }
+
+    $stmt = $pdo->prepare('SELECT id, email, full_name, department, role, otp_code, otp_expires_at FROM user_information WHERE email = :email LIMIT 1');
+    $stmt->execute([':email' => $email]);
+    $user = $stmt->fetch();
+
+    if (!$user) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'User account not found.']);
+        exit();
+    }
+
+    if (empty($user['otp_code']) || $user['otp_code'] !== $otp) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid or incorrect 6-digit verification code.']);
+        exit();
+    }
+
+    if (!empty($user['otp_expires_at']) && strtotime($user['otp_expires_at']) < time()) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Verification code has expired. Please request a new code.']);
+        exit();
+    }
+
+    // Clear OTP and record login timestamp
+    $clearStmt = $pdo->prepare('UPDATE user_information SET otp_code = NULL, otp_expires_at = NULL, last_login = NOW() WHERE id = :id');
+    $clearStmt->execute([':id' => $user['id']]);
+
+    $token = generateToken($user['id'], $user['email']);
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Verification successful! Welcome to TGH HR Agent Analytics.',
+        'user'    => [
+            'id'         => (string)$user['id'],
+            'email'      => $user['email'],
+            'full_name'  => $user['full_name'],
+            'department' => $user['department'] ?? 'Engineering & IT',
+            'role'       => $user['role'] ?? 'technical',
+            'last_login' => date('c'),
+        ],
+        'token'   => $token,
+    ]);
+    exit();
+}
+
+// -----------------------------------------------------------------------------
+// ACTION: LIST-USERS (Admin Portal)
+// -----------------------------------------------------------------------------
+if ($action === 'list-users') {
+    $stmt = $pdo->query('SELECT id, email, full_name, department, role, created_at, last_login FROM user_information ORDER BY id DESC');
+    $users = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'users' => $users]);
+    exit();
+}
+
+// -----------------------------------------------------------------------------
+// ACTION: ADD-USER (Admin Portal)
+// -----------------------------------------------------------------------------
+if ($action === 'add-user') {
+    $email      = strtolower(trim($inputData['email'] ?? ''));
+    $fullName   = trim($inputData['full_name'] ?? ($inputData['fullName'] ?? ''));
+    $department = trim($inputData['department'] ?? 'Engineering & IT');
+    $role       = ($inputData['role'] ?? '') === 'admin' ? 'admin' : 'technical';
+
+    if (empty($email) || empty($fullName)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Full Name and Corporate Email are required.']);
+        exit();
+    }
+
+    if (!isValidCompanyEmail($email, $COMPANY_DOMAIN)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => "Only company emails ({$COMPANY_DOMAIN}) can be provisioned."]);
+        exit();
+    }
+
+    $check = $pdo->prepare('SELECT id FROM user_information WHERE email = :email LIMIT 1');
+    $check->execute([':email' => $email]);
+    if ($check->fetch()) {
+        http_response_code(409);
+        echo json_encode(['success' => false, 'error' => "An account for {$email} already exists."]);
+        exit();
+    }
+
+    $defaultHash = password_hash('TechyGeekHub2026!', PASSWORD_BCRYPT);
+    $insert = $pdo->prepare('INSERT INTO user_information (email, full_name, department, role, password_hash, created_at, updated_at) VALUES (:email, :name, :dept, :role, :pass, NOW(), NOW())');
+    $insert->execute([
+        ':email' => $email,
+        ':name'  => $fullName,
+        ':dept'  => $department,
+        ':role'  => $role,
+        ':pass'  => $defaultHash,
+    ]);
+
+    $id = $pdo->lastInsertId();
+    echo json_encode([
+        'success' => true,
+        'message' => "User {$fullName} provisioned successfully.",
+        'user'    => [
+            'id'         => (string)$id,
+            'email'      => $email,
+            'full_name'  => $fullName,
+            'department' => $department,
+            'role'       => $role,
+            'created_at' => date('c'),
+            'last_login' => null,
+        ]
+    ]);
+    exit();
+}
+
+// -----------------------------------------------------------------------------
+// ACTION: UPDATE-USER-ROLE (Admin Portal)
+// -----------------------------------------------------------------------------
+if ($action === 'update-user-role') {
+    $email = strtolower(trim($inputData['email'] ?? ''));
+    $role  = ($inputData['role'] ?? '') === 'admin' ? 'admin' : 'technical';
+
+    $update = $pdo->prepare('UPDATE user_information SET role = :role, updated_at = NOW() WHERE email = :email');
+    $update->execute([':role' => $role, ':email' => $email]);
+
+    echo json_encode(['success' => true, 'message' => "Role updated to {$role}."]);
+    exit();
+}
+
+// -----------------------------------------------------------------------------
+// ACTION: DELETE-USER (Admin Portal)
+// -----------------------------------------------------------------------------
+if ($action === 'delete-user') {
+    $email = strtolower(trim($inputData['email'] ?? ''));
+
+    $del = $pdo->prepare('DELETE FROM user_information WHERE email = :email');
+    $del->execute([':email' => $email]);
+
+    echo json_encode(['success' => true, 'message' => "User {$email} removed successfully."]);
+    exit();
+}
+
+// -----------------------------------------------------------------------------
+// ACTION: LOGIN (Legacy Password Fallback)
+// -----------------------------------------------------------------------------
+if ($action === 'login') {
+    $email    = strtolower(trim($inputData['email'] ?? ''));
+    $password = $inputData['password'] ?? '';
+
+    if (empty($email) || empty($password)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Please enter both work email and password.']);
+        exit();
+    }
+
+    $stmt = $pdo->prepare('SELECT id, email, full_name, department, role, password_hash FROM user_information WHERE email = :email LIMIT 1');
+    $stmt->execute([':email' => $email]);
+    $user = $stmt->fetch();
+
+    if (!$user || !password_verify($password, $user['password_hash'])) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Invalid email or password.']);
+        exit();
+    }
+
+    $updateStmt = $pdo->prepare('UPDATE user_information SET last_login = NOW() WHERE id = :id');
+    $updateStmt->execute([':id' => $user['id']]);
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Login successful',
+        'user'    => [
+            'id'         => (string)$user['id'],
+            'email'      => $user['email'],
+            'full_name'  => $user['full_name'],
+            'department' => $user['department'],
+            'role'       => $user['role'] ?? 'technical',
+            'last_login' => date('c'),
+        ],
+        'token'   => generateToken($user['id'], $user['email']),
     ]);
     exit();
 }
@@ -243,5 +375,5 @@ if ($action === 'reset-password') {
 http_response_code(400);
 echo json_encode([
     'success' => false,
-    'error'   => 'Invalid or missing API action. Supported actions: signup, login, reset-password.'
+    'error'   => 'Invalid or missing API action. Supported actions: send-otp, verify-otp, list-users, add-user, update-user-role, delete-user, login.'
 ]);
