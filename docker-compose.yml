@@ -53,13 +53,13 @@ services:
       # Map to desired VPS host port (default: 3000)
       - "${APP_PORT:-3000}:3000"
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=n8n_default"
-      - "traefik.http.routers.hragent.entrypoints=web,websecure"
-      - "traefik.http.routers.hragent.rule=Host(`${DOMAIN_NAME:-hr-agent.srv1901759.hstgr.cloud}`)"
-      - "traefik.http.routers.hragent.tls=true"
-      - "traefik.http.routers.hragent.tls.certresolver=mytlschallenge"
-      - "traefik.http.services.hragent.loadbalancer.server.port=3000"
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=n8n_default'
+      - 'traefik.http.routers.hragent.entrypoints=web,websecure'
+      - 'traefik.http.routers.hragent.rule=Host(`hr-agent.srv1901759.hstgr.cloud`)'
+      - 'traefik.http.routers.hragent.tls=true'
+      - 'traefik.http.routers.hragent.tls.certresolver=mytlschallenge'
+      - 'traefik.http.services.hragent.loadbalancer.server.port=3000'
     networks:
       - tgh_hr_network
       - n8n_default
