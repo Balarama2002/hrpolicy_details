@@ -286,8 +286,8 @@ app.use('/api/proxy', async (req, res) => {
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
-// For all non-API GET requests, return index.html for React client-side routing
-app.get('*', (req, res) => {
+// Catch-all handler for SPA client-side routing (Universal for Express 4 & Express 5)
+app.use((req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
