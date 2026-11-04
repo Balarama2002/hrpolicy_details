@@ -128,7 +128,8 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
         department: newDepartment,
       });
 
-      setSuccessMessage(`✓ User ${newUser.full_name} (${cleanEmail}) has been provisioned as ${newRole.toUpperCase()}!`);
+      const displayName = newUser?.full_name || newUser?.user?.full_name || newFullName.trim();
+      setSuccessMessage(`✓ User ${displayName} (${cleanEmail}) has been provisioned as ${newRole.toUpperCase()}!`);
       setNewFullName('');
       setNewEmail('');
       setIsAdding(false);

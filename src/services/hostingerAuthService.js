@@ -199,7 +199,7 @@ export const hostingerAuthService = {
     const domainErr = validateCompanyEmail(email);
     if (domainErr) throw new Error(domainErr);
 
-    return await requestApi('add-user', {
+    const res = await requestApi('add-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -209,6 +209,7 @@ export const hostingerAuthService = {
         role: userData.role || 'technical',
       }),
     });
+    return res.user || res;
   },
 
   /**

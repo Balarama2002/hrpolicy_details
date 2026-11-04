@@ -142,6 +142,33 @@ async function initDatabase() {
 
       console.log('[DB] Table `user_information` verified and ready.');
 
+      // Ensure `quota_settings` table exists automatically
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS \`quota_settings\` (
+          \`id\` INT PRIMARY KEY DEFAULT 1,
+          \`daily_message_limit\` INT DEFAULT 5,
+          \`daily_token_limit\` INT DEFAULT 25000,
+          \`alert_interval_hours\` INT DEFAULT 6,
+          \`teams_webhook_url\` VARCHAR(500) DEFAULT 'https://n8n.srv1901759.hstgr.cloud/webhook/quota-alert',
+          \`resets_json\` TEXT NULL,
+          \`global_reset_at\` VARCHAR(50) NULL,
+          \`updated_at\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+
+      await connection.query(`
+        INSERT INTO \`quota_settings\` (\`id\`, \`daily_message_limit\`, \`daily_token_limit\`, \`alert_interval_hours\`, \`teams_webhook_url\`, \`resets_json\`)
+        VALUES (1, 5, 25000, 6, 'https://n8n.srv1901759.hstgr.cloud/webhook/quota-alert', '{}')
+        ON DUPLICATE KEY UPDATE \`daily_message_limit\` = VALUES(\`daily_message_limit\`);
+      `);
+      console.log('[DB] Table `quota_settings` verified and ready.');
+
+      // Automatically upgrade cbala@techygeekhub.com to admin role
+      await connection.query(`
+        UPDATE user_information SET role = 'admin' WHERE email = 'cbala@techygeekhub.com' OR email LIKE 'cherukuri%';
+      `);
+      console.log('[DB] Verified admin role for Cherukuri Bala Rama Krishna.');
+
       // Auto-seed default accounts if table is empty
       const [countRows] = await connection.query('SELECT COUNT(*) as total FROM user_information');
       if (countRows[0].total === 0) {
@@ -597,8 +624,173 @@ const authHandler = async (req, res) => {
   return res.status(400).json({ success: false, error: 'Unsupported action' });
 };
 
-app.post('/api/auth', authHandler);
-app.post('/api/auth.php', authHandler); // Universal compatibility with existing UI
+// Universal route handlers for all HTTP methods (GET, POST, etc.)
+app.all('/api/auth', authHandler);
+app.all('/api/auth.php', authHandler);
+
+// -----------------------------------------------------------------------------
+// QUOTA CONTROLLER (Pre-Flight Gate for n8n & Admin Portal)
+// -----------------------------------------------------------------------------
+const quotaHandler = async (req, res) => {
+  const action = req.query.action || req.body?.action || 'check';
+
+  try {
+    if (!pool) {
+      return res.status(503).json({ success: false, error: 'Database service is initializing' });
+    }
+
+    // Load settings from quota_settings table
+    const [rows] = await pool.query('SELECT * FROM quota_settings WHERE id = 1 LIMIT 1');
+    const settings = rows[0] || {
+      daily_message_limit: 5,
+      daily_token_limit: 25000,
+      alert_interval_hours: 6,
+      teams_webhook_url: 'https://n8n.srv1901759.hstgr.cloud/webhook/quota-alert',
+      resets_json: '{}',
+      global_reset_at: null,
+    };
+
+    const resets = JSON.parse(settings.resets_json || '{}');
+    const msgLimit = Number(settings.daily_message_limit) || 5;
+    const tknLimit = Number(settings.daily_token_limit) || 25000;
+
+    if (action === 'get-config') {
+      return res.json({
+        success: true,
+        config: {
+          dailyMessageLimit: msgLimit,
+          dailyTokenLimit: tknLimit,
+          alertIntervalHours: settings.alert_interval_hours || 6,
+          teamsWebhookUrl: settings.teams_webhook_url,
+          resets,
+          globalResetAt: settings.global_reset_at,
+        },
+      });
+    }
+
+    if (action === 'set-config') {
+      const newMsg = req.body?.dailyMessageLimit ? Number(req.body.dailyMessageLimit) : msgLimit;
+      const newTkn = req.body?.dailyTokenLimit ? Number(req.body.dailyTokenLimit) : tknLimit;
+      const newInt = req.body?.alertIntervalHours ? Number(req.body.alertIntervalHours) : settings.alert_interval_hours;
+      const newUrl = req.body?.teamsWebhookUrl || settings.teams_webhook_url;
+
+      await pool.query(
+        'UPDATE quota_settings SET daily_message_limit = ?, daily_token_limit = ?, alert_interval_hours = ?, teams_webhook_url = ? WHERE id = 1',
+        [newMsg, newTkn, newInt, newUrl]
+      );
+      return res.json({ success: true, message: 'Quota settings updated in database' });
+    }
+
+    if (action === 'reset-user') {
+      const empName = (req.body?.employeeName || req.query.user || '').trim();
+      if (empName) {
+        resets[empName.toLowerCase()] = {
+          employeeName: empName,
+          resetAt: new Date().toISOString(),
+          timestamp: Date.now(),
+        };
+        await pool.query('UPDATE quota_settings SET resets_json = ? WHERE id = 1', [JSON.stringify(resets)]);
+      }
+      return res.json({ success: true, message: `Quota for ${empName} reset to 0 in database` });
+    }
+
+    if (action === 'reset-all') {
+      const now = new Date().toISOString();
+      await pool.query('UPDATE quota_settings SET resets_json = "{}", global_reset_at = ? WHERE id = 1', [now]);
+      return res.json({ success: true, message: 'All quotas reset to 0 in database' });
+    }
+
+    // Pre-flight Check for n8n/Teams bot
+    if (action === 'check') {
+      const userParam = (req.query.user || req.body?.user || '').trim();
+      const emailParam = (req.query.email || req.body?.email || '').trim();
+
+      if (!userParam && !emailParam) {
+        return res.status(400).json({ allowed: true, error: 'User identifier required' });
+      }
+
+      // Fetch live audit logs from n8n webhook
+      let logs = [];
+      try {
+        const feedRes = await fetch('https://n8n.srv1901759.hstgr.cloud/webhook/hr-agent-analytics-live');
+        if (feedRes.ok) logs = await feedRes.json();
+      } catch (e) {}
+
+      const targetName = userParam.toLowerCase();
+      const targetEmail = emailParam.toLowerCase();
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayStartTime = todayStart.getTime();
+
+      let todayQueries = 0;
+      let todayTokens = 0;
+
+      const empReset = resets[targetName];
+      const empResetTime = empReset ? new Date(empReset.resetAt).getTime() : 0;
+      const globalResetTime = settings.global_reset_at ? new Date(settings.global_reset_at).getTime() : 0;
+
+      (logs || []).forEach(log => {
+        const logName = String(log.NAME || log.name || log.EmployeeName || '').toLowerCase();
+        const logEmail = String(log.EMAIL || log.email || '').toLowerCase();
+        const matches = (targetName && (logName.includes(targetName) || targetName.includes(logName))) ||
+                        (targetEmail && logEmail === targetEmail);
+
+        if (matches) {
+          const logTime = log.createdAt ? new Date(log.createdAt).getTime() : Date.now();
+          if (logTime >= todayStartTime) {
+            if (globalResetTime && logTime <= globalResetTime) return;
+            if (empResetTime && logTime <= empResetTime) return;
+
+            todayQueries++;
+            const pt = Number(log.PROMPT_TOKENS || log.promptTokens || 0);
+            const ct = Number(log.COMPLETION_TOKENS || log.completionTokens || 0);
+            const tt = Number(log.TOTAL_TOKENS || log.totalTokens || (pt + ct));
+            todayTokens += tt;
+          }
+        }
+      });
+
+      const queriesExceeded = (msgLimit > 0 && todayQueries >= msgLimit);
+      const tokensExceeded = (tknLimit > 0 && todayTokens >= tknLimit);
+      const isExceeded = queriesExceeded || tokensExceeded;
+
+      if (isExceeded) {
+        const limitDesc = queriesExceeded ? `${todayQueries}/${msgLimit} questions` : `${todayTokens.toLocaleString()} / ${tknLimit.toLocaleString()} tokens`;
+        return res.json({
+          allowed: false,
+          reason: queriesExceeded ? 'DAILY_MESSAGE_LIMIT_REACHED' : 'DAILY_TOKEN_LIMIT_REACHED',
+          employee: userParam || emailParam,
+          todayQueries,
+          dailyMessageLimit: msgLimit,
+          todayTokens,
+          dailyTokenLimit: tknLimit,
+          replyMessage: `⚠️ **Daily Quota Exceeded**: You have used your daily allowance (${limitDesc}). Your request was paused to conserve resources. Please contact the HR team for additional access.`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      return res.json({
+        allowed: true,
+        employee: userParam || emailParam,
+        todayQueries,
+        remainingQueries: Math.max(0, msgLimit - todayQueries),
+        dailyMessageLimit: msgLimit,
+        todayTokens,
+        remainingTokens: Math.max(0, tknLimit - todayTokens),
+        dailyTokenLimit: tknLimit,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return res.status(400).json({ success: false, error: 'Unknown action' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+app.all('/api/quota', quotaHandler);
+app.all('/api/quota.php', quotaHandler);
 
 // -----------------------------------------------------------------------------
 // N8N CORS PROXY (Enables seamless queries to n8n webhook without browser CORS)
