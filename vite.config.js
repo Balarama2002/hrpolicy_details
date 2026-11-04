@@ -669,8 +669,15 @@ function devApiPlugin() {
               const body = bodyText ? JSON.parse(bodyText) : {};
               const reqAction = action || body.action || 'check';
 
-              if (reqAction === 'get-config') {
-                res.end(JSON.stringify({ success: true, config: devQuotaConfig }));
+              if (reqAction === 'get-config' || reqAction === 'config' || reqAction === 'tokens' || reqAction === 'get-tokens' || reqAction === 'limits') {
+                res.end(JSON.stringify({
+                  success: true,
+                  dailyTokenLimit: devQuotaConfig.dailyTokenLimit,
+                  dailyMessageLimit: devQuotaConfig.dailyMessageLimit,
+                  alertIntervalHours: devQuotaConfig.alertIntervalHours,
+                  teamsWebhookUrl: devQuotaConfig.teamsWebhookUrl,
+                  config: devQuotaConfig,
+                }));
                 return;
               }
 

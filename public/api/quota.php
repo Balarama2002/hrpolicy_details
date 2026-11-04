@@ -255,13 +255,17 @@ if ($action === 'check') {
 // -----------------------------------------------------------------------------
 // 2. ACTION: GET-CONFIG
 // -----------------------------------------------------------------------------
-if ($action === 'get-config') {
+if ($action === 'get-config' || $action === 'config' || $action === 'tokens' || $action === 'get-tokens' || $action === 'limits') {
     echo json_encode([
-        'success' => true,
+        'success'            => true,
+        'dailyTokenLimit'    => (int)$currentSettings['dailyTokenLimit'],
+        'dailyMessageLimit'  => (int)$currentSettings['dailyMessageLimit'],
+        'alertIntervalHours' => (int)$currentSettings['alertIntervalHours'],
+        'teamsWebhookUrl'    => $currentSettings['teamsWebhookUrl'],
         'config'  => [
-            'dailyMessageLimit'  => $currentSettings['dailyMessageLimit'],
-            'dailyTokenLimit'    => $currentSettings['dailyTokenLimit'],
-            'alertIntervalHours' => $currentSettings['alertIntervalHours'],
+            'dailyMessageLimit'  => (int)$currentSettings['dailyMessageLimit'],
+            'dailyTokenLimit'    => (int)$currentSettings['dailyTokenLimit'],
+            'alertIntervalHours' => (int)$currentSettings['alertIntervalHours'],
             'teamsWebhookUrl'    => $currentSettings['teamsWebhookUrl'],
             'resets'             => $currentSettings['resets'],
             'globalResetAt'      => $currentSettings['globalResetAt'],

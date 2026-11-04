@@ -661,9 +661,13 @@ const quotaHandler = async (req, res) => {
     const msgLimit = Number(settings.daily_message_limit) || 5;
     const tknLimit = Number(settings.daily_token_limit) || 25000;
 
-    if (action === 'get-config') {
+    if (action === 'get-config' || action === 'config' || action === 'tokens' || action === 'get-tokens' || action === 'limits') {
       return res.json({
         success: true,
+        dailyTokenLimit: tknLimit,
+        dailyMessageLimit: msgLimit,
+        alertIntervalHours: settings.alert_interval_hours || 6,
+        teamsWebhookUrl: settings.teams_webhook_url,
         config: {
           dailyMessageLimit: msgLimit,
           dailyTokenLimit: tknLimit,

@@ -758,8 +758,8 @@ export default function App() {
                   {isExceeded ? <AlertTriangle className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
                 </div>
                 <div>
-                  <div className="font-bold flex items-center gap-2">
-                    <span>Technical Role Scope Active</span>
+                  <div className="font-bold text-sm flex items-center gap-2">
+                    <span>{user?.full_name || user?.email?.split('@')[0] || 'User'}</span>
                     {isExceeded ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse">
                         Daily Quota Exceeded
@@ -770,10 +770,15 @@ export default function App() {
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-[11px] opacity-80 mt-0.5">
-                    Displaying strictly your personal questions and token telemetry for <strong>{user?.full_name || user?.email}</strong>.
-                    {isExceeded && ' You have reached your allocated quota. Please reach out to HR for additional resources.'}
-                  </p>
+                  {isExceeded ? (
+                    <p className="text-[11px] opacity-90 mt-0.5 text-rose-600 dark:text-rose-400 font-medium">
+                      You have reached your allocated quota. Please reach out to HR for additional resources.
+                    </p>
+                  ) : isNear ? (
+                    <p className="text-[11px] opacity-90 mt-0.5 text-amber-600 dark:text-amber-400 font-medium">
+                      You are approaching your daily allocated quota (85%+ used).
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2">

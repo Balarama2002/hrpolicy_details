@@ -45,18 +45,18 @@ export default function KpiCards({ stats, periodLabel }) {
     ? Math.round((sufficientCount / totalSearches) * 100) 
     : 0;
 
-  // Quota Threshold Checks for Personal / Current View
+  // Quota Threshold Checks - Strictly for Employees / Technical users, never for Admin org analytics
   const quotaConfig = getQuotaConfig();
   const dailyTokenLimit = quotaConfig.dailyTokenLimit || 25000;
   const dailyMessageLimit = quotaConfig.dailyMessageLimit || 5;
 
   const tokenPct = dailyTokenLimit > 0 ? Math.round((totalTokens / dailyTokenLimit) * 100) : 0;
-  const isTokenExceeded = tokenPct >= 100 || totalTokens >= dailyTokenLimit;
-  const isTokenNear = !isTokenExceeded && tokenPct >= 85;
+  const isTokenExceeded = !isAdmin && (tokenPct >= 100 || totalTokens >= dailyTokenLimit);
+  const isTokenNear = !isAdmin && !isTokenExceeded && tokenPct >= 85;
 
   const queryPct = dailyMessageLimit > 0 ? Math.round((totalSearches / dailyMessageLimit) * 100) : 0;
-  const isQueryExceeded = queryPct >= 100 || totalSearches >= dailyMessageLimit;
-  const isQueryNear = !isQueryExceeded && queryPct >= 85;
+  const isQueryExceeded = !isAdmin && (queryPct >= 100 || totalSearches >= dailyMessageLimit);
+  const isQueryNear = !isAdmin && !isQueryExceeded && queryPct >= 85;
 
   return (
     <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
@@ -296,18 +296,20 @@ export default function KpiCards({ stats, periodLabel }) {
           </span>
         </div>
 
-        {/* Quota Progress Meter */}
-        <div className="mt-2 w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-          <div 
-            className={`h-full rounded-full transition-all duration-500 ${
-              isTokenExceeded ? 'bg-rose-500 shadow-xs shadow-rose-500/50' : 
-              isTokenNear ? 'bg-amber-500 shadow-xs shadow-amber-500/50' : 
-              'bg-purple-500'
-            }`}
-            style={{ width: `${Math.min(tokenPct, 100)}%` }}
-            title={`Quota Consumption: ${tokenPct}% (${totalTokens.toLocaleString()} / ${dailyTokenLimit.toLocaleString()} tokens)`}
-          />
-        </div>
+        {/* Quota Progress Meter - Displayed strictly for individual users, hidden for Admin */}
+        {!isAdmin && (
+          <div className="mt-2 w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all duration-500 ${
+                isTokenExceeded ? 'bg-rose-500 shadow-xs shadow-rose-500/50' : 
+                isTokenNear ? 'bg-amber-500 shadow-xs shadow-amber-500/50' : 
+                'bg-purple-500'
+              }`}
+              style={{ width: `${Math.min(tokenPct, 100)}%` }}
+              title={`Quota Consumption: ${tokenPct}% (${totalTokens.toLocaleString()} / ${dailyTokenLimit.toLocaleString()} tokens)`}
+            />
+          </div>
+        )}
 
         <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono">
           <span>In: {promptTokens.toLocaleString()}</span>
