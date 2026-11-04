@@ -464,6 +464,8 @@ export function evaluateUserDailyQuota(user, logs = [], quotaConfig = getQuotaCo
     email: user.email,
     todayQueries: 0,
     todayTokens: 0,
+    queryLimit: quotaConfig.dailyMessageLimit || 5,
+    tokenLimit: quotaConfig.dailyTokenLimit || 25000,
     queryPercentage: 0,
     tokenPercentage: 0,
     queryExceeded: false,

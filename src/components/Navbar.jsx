@@ -10,13 +10,15 @@ import {
   Code2 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import UserQuotaIndicator from './UserQuotaIndicator';
 
 export default function Navbar({ 
   onRefresh, 
   isRefreshing, 
   onOpenAdminPortal,
   theme, 
-  onToggleTheme 
+  onToggleTheme,
+  logs = [] 
 }) {
   const isDark = theme === 'dark';
   const { user, signOut, isAdmin } = useAuth();
@@ -83,6 +85,15 @@ export default function Navbar({
                 <Moon className="w-4 h-4 text-indigo-600 transition-transform group-hover:-rotate-12" />
               )}
             </button>
+
+            {/* User Daily Quota Indicator (Visible to Employees & Technical Staff) */}
+            {!isAdmin && user && (
+              <UserQuotaIndicator 
+                user={user} 
+                logs={logs} 
+                variant="compact" 
+              />
+            )}
 
             {/* User Profile & Sign Out */}
             {user && (

@@ -132,6 +132,29 @@ export default function KpiCards({ stats, periodLabel, logs = [] }) {
           </span>
         </div>
 
+        {/* Quota Progress Meter for Queries - Employees only */}
+        {!isAdmin && (
+          <div className="mt-2 space-y-1">
+            <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${
+                  isQueryExceeded ? 'bg-rose-500 shadow-xs shadow-rose-500/50' : 
+                  isQueryNear ? 'bg-amber-500 shadow-xs shadow-amber-500/50' : 
+                  'bg-blue-500'
+                }`}
+                style={{ width: `${Math.min(queryPct, 100)}%` }}
+                title={`Daily Question Quota: ${queryPct}% (${userDailyQuota.todayQueries} / ${dailyMessageLimit} today)`}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+              <span>Limit: {dailyMessageLimit}/day</span>
+              <span className={isQueryExceeded ? 'text-rose-500 font-bold' : isQueryNear ? 'text-amber-500 font-bold' : ''}>
+                {userDailyQuota.todayQueries}/{dailyMessageLimit} today ({queryPct}%)
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -310,16 +333,24 @@ export default function KpiCards({ stats, periodLabel, logs = [] }) {
 
         {/* Quota Progress Meter - Displayed strictly for individual users, hidden for Admin */}
         {!isAdmin && (
-          <div className="mt-2 w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full transition-all duration-500 ${
-                isTokenExceeded ? 'bg-rose-500 shadow-xs shadow-rose-500/50' : 
-                isTokenNear ? 'bg-amber-500 shadow-xs shadow-amber-500/50' : 
-                'bg-purple-500'
-              }`}
-              style={{ width: `${Math.min(tokenPct, 100)}%` }}
-              title={`Quota Consumption: ${tokenPct}% (${totalTokens.toLocaleString()} / ${dailyTokenLimit.toLocaleString()} tokens)`}
-            />
+          <div className="mt-2 space-y-1">
+            <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${
+                  isTokenExceeded ? 'bg-rose-500 shadow-xs shadow-rose-500/50' : 
+                  isTokenNear ? 'bg-amber-500 shadow-xs shadow-amber-500/50' : 
+                  'bg-purple-500'
+                }`}
+                style={{ width: `${Math.min(tokenPct, 100)}%` }}
+                title={`Daily Token Quota: ${tokenPct}% (${userDailyQuota.todayTokens.toLocaleString()} / ${dailyTokenLimit.toLocaleString()} tokens today)`}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+              <span>Limit: {(dailyTokenLimit / 1000).toFixed(0)}k/day</span>
+              <span className={isTokenExceeded ? 'text-rose-500 font-bold' : isTokenNear ? 'text-amber-500 font-bold' : ''}>
+                {userDailyQuota.todayTokens.toLocaleString()} today ({tokenPct}%)
+              </span>
+            </div>
           </div>
         )}
 

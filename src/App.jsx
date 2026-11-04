@@ -21,6 +21,7 @@ import { useAuth } from './context/AuthContext';
 import AuthPage from './components/auth/AuthPage';
 import ForceResetPasswordModal from './components/auth/ForceResetPasswordModal';
 import AdminPortalModal from './components/admin/AdminPortalModal';
+import UserQuotaIndicator from './components/UserQuotaIndicator';
 import { checkAndDispatchQuotaAlerts, getQuotaConfig, syncQuotaConfigFromServer, evaluateUserDailyQuota } from './services/quotaService';
 import { Bot, Loader2, Code2, Users, Bell, AlertTriangle, RotateCcw, X } from 'lucide-react';
 
@@ -737,6 +738,7 @@ export default function App() {
         onOpenAdminPortal={() => setIsAdminPortalOpen(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
+        logs={logs}
       />
 
       {/* 2. Main Dashboard Content (Full Width Desktop Layout) */}
@@ -751,15 +753,15 @@ export default function App() {
           const wasReset = userQuota.wasResetToday && !isExceeded;
 
           return (
-            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs transition-colors ${
+            <div className={`p-4 rounded-2xl border flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 text-xs transition-colors ${
               isExceeded 
                 ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300' 
                 : isNear 
                 ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300' 
                 : 'bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-300'
             } animate-fadeIn`}>
-              <div className="flex items-center gap-2.5">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold shrink-0 ${
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${
                   isExceeded ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400' : 
                   isNear ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 
                   'bg-blue-500/20 text-blue-600 dark:text-blue-400'
@@ -781,7 +783,11 @@ export default function App() {
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
                         <RotateCcw className="w-2.5 h-2.5" /> Quota Reset by Admin
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                        Healthy Quota
+                      </span>
+                    )}
                   </div>
                   {isExceeded ? (
                     <p className="text-[11px] opacity-90 mt-0.5 text-rose-600 dark:text-rose-400 font-medium">
@@ -795,11 +801,22 @@ export default function App() {
                     <p className="text-[11px] opacity-80 mt-0.5 text-cyan-600 dark:text-cyan-400 font-medium">
                       Your quota has been refreshed by an Administrator. Usage counter is at 0.
                     </p>
-                  ) : null}
+                  ) : (
+                    <p className="text-[11px] opacity-80 mt-0.5 text-slate-500 dark:text-slate-400 font-medium">
+                      Personal telemetry active. Daily limits reset automatically at 12:00 AM IST.
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`px-3 py-1 rounded-xl border text-xs font-bold font-mono ${
+
+              {/* Usage Limit Meters & Total Filtered Queries */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+                <UserQuotaIndicator 
+                  user={user} 
+                  logs={logs} 
+                  variant="banner" 
+                />
+                <span className={`px-3 py-2 rounded-xl border text-xs font-bold font-mono shrink-0 self-stretch sm:self-auto flex items-center justify-center ${
                   isExceeded ? 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400' : 
                   isNear ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400' : 
                   'bg-blue-500/15 border-blue-500/30 text-blue-600 dark:text-blue-400'
