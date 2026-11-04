@@ -54,9 +54,11 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
     setErrorMessage('');
     try {
       const data = await listUsers();
-      setUsers(data);
+      const userList = Array.isArray(data) ? data : (data?.users || []);
+      setUsers(userList);
     } catch (err) {
       setErrorMessage(err.message || 'Failed to load user list.');
+      setUsers([]);
     } finally {
       setIsLoading(false);
     }
@@ -262,15 +264,17 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
     setAlertHistory(getAlertHistory());
   };
 
-  const filteredUsers = users.filter(u => 
+  const safeUsers = Array.isArray(users) ? users : [];
+
+  const filteredUsers = safeUsers.filter(u => 
     (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (u.department || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (u.role || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const adminCount = users.filter(u => u.role === 'admin').length;
-  const technicalCount = users.filter(u => u.role !== 'admin').length;
+  const adminCount = safeUsers.filter(u => u.role === 'admin').length;
+  const technicalCount = safeUsers.filter(u => u.role !== 'admin').length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
@@ -318,7 +322,7 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
             <Users className="w-4 h-4" />
             <span>User Directory & Roles</span>
             <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono">
-              {users.length}
+              {safeUsers.length}
             </span>
           </button>
 
@@ -376,7 +380,7 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 grid grid-cols-3 gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-                  {users.length}
+                  {safeUsers.length}
                 </div>
                 <div>
                   <div className="text-[11px] text-slate-400 font-medium">Total Provisioned</div>

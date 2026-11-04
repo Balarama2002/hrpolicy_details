@@ -12,7 +12,7 @@ const QUOTA_SENT_CACHE_KEY = 'tgh_quota_sent_cache';
 const QUOTA_RESETS_KEY = 'tgh_quota_resets';
 
 export const DEFAULT_QUOTA_CONFIG = {
-  dailyMessageLimit: 10, // Max queries allowed per employee per day
+  dailyMessageLimit: 5, // Default: 5 questions allowed per employee per day
   dailyTokenLimit: 25000, // Max tokens allowed per employee per day
   alertIntervalHours: 6, // Alert reminder cooldown: 6 hours (configurable: 1, 6, 12, 24)
   teamsWebhookUrl: 'https://n8n.srv1901759.hstgr.cloud/webhook/quota-alert',
@@ -35,11 +35,16 @@ export function getQuotaConfig() {
 }
 
 /**
- * Saves quota configuration to localStorage
+ * Saves quota configuration to localStorage and syncs with backend server
  */
 export function saveQuotaConfig(config) {
   try {
     localStorage.setItem(QUOTA_CONFIG_KEY, JSON.stringify(config));
+    fetch('/api/quota.php?action=set-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }).catch(() => {});
   } catch (e) {
     console.error('Failed to save quota config:', e);
   }
@@ -95,11 +100,12 @@ export function resetEmployeeQuota(employeeName) {
     resets[key] = {
       employeeName: employeeName.trim(),
       resetAt: nowIso,
+      resetTimestamp: Date.now(),
       dateStr: todayStr,
     };
     localStorage.setItem(QUOTA_RESETS_KEY, JSON.stringify(resets));
 
-    // Clear alert cooldown cache for this user so they are clean
+    // Clear alert cooldown cache for this user so they are immediately clean
     const cache = JSON.parse(localStorage.getItem(QUOTA_SENT_CACHE_KEY) || '{}');
     delete cache[key];
     delete cache[`${key}_${todayStr}`];
@@ -114,6 +120,12 @@ export function resetEmployeeQuota(employeeName) {
       status: 'Quota Reset by Admin',
       success: true,
     });
+
+    fetch('/api/quota.php?action=reset-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeName: employeeName.trim() }),
+    }).catch(() => {});
   } catch (e) {
     console.error('Failed to reset quota for employee:', e);
   }
@@ -138,6 +150,12 @@ export function resetAllEmployeeQuotas() {
       status: 'All Quotas Reset',
       success: true,
     });
+
+    fetch('/api/quota.php?action=reset-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }).catch(() => {});
   } catch (e) {
     console.error('Failed to reset all quotas:', e);
   }
@@ -280,16 +298,7 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
       const email = log.user_email || log.EMAIL || log.email || `${name.toLowerCase().replace(/\s+/g, '.')}@techygeekhub.com`;
       const logTime = d.getTime();
 
-      // Check global admin reset
-      if (globalResetTime && logTime <= globalResetTime) return;
-
-      // Check per-employee admin reset today
-      const empReset = resets[name.toLowerCase()];
-      if (empReset && empReset.dateStr === todayStr) {
-        const empResetTime = new Date(empReset.resetAt).getTime();
-        if (logTime <= empResetTime) return; // Skip log prior to admin reset
-      }
-
+      // Ensure employee record always exists so it displays in telemetry table even if count is 0
       if (!employeeUsage[name]) {
         employeeUsage[name] = {
           name,
@@ -299,7 +308,20 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
           promptTokens: 0,
           completionTokens: 0,
           lastQueryTime: log.createdAt,
+          rawTotalQueries: 0,
         };
+      }
+
+      employeeUsage[name].rawTotalQueries++;
+
+      // Check global admin reset: ignore logs that occurred prior to global reset
+      if (globalResetTime && logTime <= globalResetTime) return;
+
+      // Check per-employee admin reset: ignore logs that occurred prior to reset
+      const empReset = resets[name.toLowerCase()];
+      if (empReset) {
+        const empResetTime = empReset.resetTimestamp || new Date(empReset.resetAt).getTime();
+        if (logTime <= empResetTime) return;
       }
 
       employeeUsage[name].todayQueries++;
@@ -326,7 +348,7 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
 
     const isNearLimit = !isExceeded && (queryPct >= 80 || tokenPct >= 80);
     const empReset = resets[emp.name.toLowerCase()];
-    const wasResetToday = Boolean(empReset && empReset.dateStr === todayStr);
+    const wasReset = Boolean(empReset || globalResetTime > 0);
 
     return {
       ...emp,
@@ -340,9 +362,9 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
       isExceeded,
       isNearLimit,
       exceededMetric,
-      wasResetToday,
-      resetAt: empReset?.resetAt || null,
-      status: wasResetToday && !isExceeded ? 'Reset by Admin' : isExceeded ? 'Exceeded' : isNearLimit ? 'Near Limit' : 'Normal',
+      wasResetToday: wasReset,
+      resetAt: empReset?.resetAt || globalResetAt || null,
+      status: wasReset && !isExceeded ? 'Reset by Admin' : isExceeded ? 'Exceeded' : isNearLimit ? 'Near Limit' : 'Normal',
     };
   });
 

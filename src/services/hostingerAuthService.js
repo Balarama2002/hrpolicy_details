@@ -183,10 +183,11 @@ export const hostingerAuthService = {
    * ADMIN PORTAL: Lists all provisioned users
    */
   async listUsers() {
-    return await requestApi('list-users', {
+    const res = await requestApi('list-users', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
+    return Array.isArray(res) ? res : (res?.users || []);
   },
 
   /**

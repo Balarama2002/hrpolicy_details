@@ -38,6 +38,14 @@ function devApiPlugin() {
   ]);
 
   const devOtps = new Map();
+  const devQuotaConfig = {
+    dailyMessageLimit: 5,
+    dailyTokenLimit: 25000,
+    alertIntervalHours: 6,
+    teamsWebhookUrl: 'https://n8n.srv1901759.hstgr.cloud/webhook/quota-alert',
+    resets: {},
+    globalResetAt: null,
+  };
 
   return {
     name: 'dev-api-plugin',
@@ -631,6 +639,164 @@ function devApiPlugin() {
 
               res.statusCode = 400;
               res.end(JSON.stringify({ success: false, error: 'Unknown action' }));
+            } catch (err) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          });
+          return;
+        }
+
+        // Quota Pre-Flight Gate API endpoint (/api/quota.php or /api/quota)
+        if (urlObj.pathname === '/api/quota.php' || urlObj.pathname === '/api/quota') {
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 200;
+            res.end();
+            return;
+          }
+
+          const action = urlObj.searchParams.get('action') || 'check';
+
+          let bodyText = '';
+          req.on('data', (chunk) => { bodyText += chunk; });
+          req.on('end', async () => {
+            try {
+              const body = bodyText ? JSON.parse(bodyText) : {};
+              const reqAction = action || body.action || 'check';
+
+              if (reqAction === 'get-config') {
+                res.end(JSON.stringify({ success: true, config: devQuotaConfig }));
+                return;
+              }
+
+              if (reqAction === 'set-config') {
+                if (body.dailyMessageLimit !== undefined) devQuotaConfig.dailyMessageLimit = Number(body.dailyMessageLimit);
+                if (body.dailyTokenLimit !== undefined) devQuotaConfig.dailyTokenLimit = Number(body.dailyTokenLimit);
+                if (body.alertIntervalHours !== undefined) devQuotaConfig.alertIntervalHours = Number(body.alertIntervalHours);
+                if (body.teamsWebhookUrl) devQuotaConfig.teamsWebhookUrl = String(body.teamsWebhookUrl);
+                res.end(JSON.stringify({ success: true, message: 'Quota config saved', config: devQuotaConfig }));
+                return;
+              }
+
+              if (reqAction === 'reset-user') {
+                const emp = (body.employeeName || urlObj.searchParams.get('user') || '').trim();
+                if (emp) {
+                  devQuotaConfig.resets[emp.toLowerCase()] = {
+                    employeeName: emp,
+                    resetAt: new Date().toISOString(),
+                    timestamp: Date.now(),
+                  };
+                }
+                res.end(JSON.stringify({ success: true, message: `Quota for ${emp} reset to 0` }));
+                return;
+              }
+
+              if (reqAction === 'reset-all') {
+                devQuotaConfig.globalResetAt = new Date().toISOString();
+                devQuotaConfig.resets = {};
+                res.end(JSON.stringify({ success: true, message: 'All quotas reset to 0' }));
+                return;
+              }
+
+              // Check action (Pre-flight gate for n8n/Teams bot)
+              if (reqAction === 'check') {
+                const userParam = (urlObj.searchParams.get('user') || body.user || '').trim();
+                const emailParam = (urlObj.searchParams.get('email') || body.email || '').trim();
+
+                if (!userParam && !emailParam) {
+                  res.statusCode = 400;
+                  res.end(JSON.stringify({ allowed: true, error: 'User identifier required' }));
+                  return;
+                }
+
+                // Fetch latest audit logs from n8n live feed
+                let logs = [];
+                try {
+                  const feedRes = await fetch('https://n8n.srv1901759.hstgr.cloud/webhook/hr-agent-analytics-live', {
+                    headers: { 'Accept': 'application/json' },
+                  });
+                  if (feedRes.ok) logs = await feedRes.json();
+                } catch (e) {}
+
+                const targetName = userParam.toLowerCase();
+                const targetEmail = emailParam.toLowerCase();
+
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+                const todayStartTime = todayStart.getTime();
+
+                let todayQueries = 0;
+                let todayTokens = 0;
+
+                const empReset = devQuotaConfig.resets[targetName];
+                const empResetTime = empReset ? new Date(empReset.resetAt).getTime() : 0;
+                const globalResetTime = devQuotaConfig.globalResetAt ? new Date(devQuotaConfig.globalResetAt).getTime() : 0;
+
+                (logs || []).forEach(log => {
+                  const logName = String(log.NAME || log.name || log.EmployeeName || '').toLowerCase();
+                  const logEmail = String(log.EMAIL || log.email || '').toLowerCase();
+                  const matches = (targetName && (logName.includes(targetName) || targetName.includes(logName))) ||
+                                  (targetEmail && logEmail === targetEmail);
+
+                  if (matches) {
+                    const logTime = log.createdAt ? new Date(log.createdAt).getTime() : Date.now();
+                    if (logTime >= todayStartTime) {
+                      if (globalResetTime && logTime <= globalResetTime) return;
+                      if (empResetTime && logTime <= empResetTime) return;
+
+                      todayQueries++;
+                      const pt = Number(log.PROMPT_TOKENS || log.promptTokens || 0);
+                      const ct = Number(log.COMPLETION_TOKENS || log.completionTokens || 0);
+                      const tt = Number(log.TOTAL_TOKENS || log.totalTokens || (pt + ct));
+                      todayTokens += tt;
+                    }
+                  }
+                });
+
+                const msgLimit = devQuotaConfig.dailyMessageLimit;
+                const tknLimit = devQuotaConfig.dailyTokenLimit;
+
+                const queriesExceeded = (msgLimit > 0 && todayQueries >= msgLimit);
+                const tokensExceeded = (tknLimit > 0 && todayTokens >= tknLimit);
+                const isExceeded = queriesExceeded || tokensExceeded;
+
+                if (isExceeded) {
+                  const limitDesc = queriesExceeded ? `${todayQueries}/${msgLimit} questions` : `${todayTokens.toLocaleString()} / ${tknLimit.toLocaleString()} tokens`;
+                  res.end(JSON.stringify({
+                    allowed: false,
+                    reason: queriesExceeded ? 'DAILY_MESSAGE_LIMIT_REACHED' : 'DAILY_TOKEN_LIMIT_REACHED',
+                    employee: userParam || emailParam,
+                    todayQueries,
+                    dailyMessageLimit: msgLimit,
+                    todayTokens,
+                    dailyTokenLimit: tknLimit,
+                    replyMessage: `⚠️ **Daily Quota Exceeded**: You have used your daily allowance (${limitDesc}). Your request was paused to conserve resources. Please contact the HR team for additional access.`,
+                    timestamp: new Date().toISOString(),
+                  }));
+                  return;
+                }
+
+                res.end(JSON.stringify({
+                  allowed: true,
+                  employee: userParam || emailParam,
+                  todayQueries,
+                  remainingQueries: Math.max(0, msgLimit - todayQueries),
+                  dailyMessageLimit: msgLimit,
+                  todayTokens,
+                  remainingTokens: Math.max(0, tknLimit - todayTokens),
+                  dailyTokenLimit: tknLimit,
+                  timestamp: new Date().toISOString(),
+                }));
+                return;
+              }
+
+              res.statusCode = 400;
+              res.end(JSON.stringify({ success: false, error: 'Unknown quota action' }));
             } catch (err) {
               res.statusCode = 500;
               res.end(JSON.stringify({ success: false, error: err.message }));
