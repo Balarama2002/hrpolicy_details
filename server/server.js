@@ -237,25 +237,28 @@ app.get('/api/test.php', healthHandler); // Backwards compatibility for existing
 // AUTHENTICATION CONTROLLER (Supports /api/auth and /api/auth.php)
 // -----------------------------------------------------------------------------
 const authHandler = async (req, res) => {
-  const action = req.query.action || req.body.action;
-  const email = (req.body.email || '').trim().toLowerCase();
-  const password = req.body.password || '';
+  try {
+    const body = req.body || {};
+    const query = req.query || {};
+    const action = query.action || body.action;
+    const email = (body.email || query.email || '').trim().toLowerCase();
+    const password = body.password || '';
 
-  if (!action) {
-    return res.status(400).json({ success: false, error: 'Missing action parameter (signup, login, reset-password).' });
-  }
+    if (!action) {
+      return res.status(400).json({ success: false, error: 'Missing action parameter (signup, login, reset-password).' });
+    }
 
-  // Domain validation check
-  if (email && !isValidCompanyEmail(email)) {
-    return res.status(403).json({
-      success: false,
-      error: `Access restricted: Only official company email addresses (${COMPANY_DOMAIN}) are allowed. Please use your corporate email ID.`,
-    });
-  }
+    // Domain validation check (only check if email is provided, not for list-users)
+    if (email && !isValidCompanyEmail(email)) {
+      return res.status(403).json({
+        success: false,
+        error: `Access restricted: Only official company email addresses (${COMPANY_DOMAIN}) are allowed. Please use your corporate email ID.`,
+      });
+    }
 
-  if (!pool) {
-    return res.status(503).json({ success: false, error: 'Database service is initializing. Please retry in a few seconds.' });
-  }
+    if (!pool) {
+      return res.status(503).json({ success: false, error: 'Database service is initializing. Please retry in a few seconds.' });
+    }
 
   // -------------------------------------------------------------
   // 1. SEND 6-DIGIT OTP (Restricted to Provisioned Accounts)
@@ -392,9 +395,9 @@ const authHandler = async (req, res) => {
   // 4. ADMIN PORTAL: ADD USER
   // -------------------------------------------------------------
   if (action === 'add-user') {
-    const fullName = (req.body.full_name || req.body.fullName || '').trim();
-    const department = (req.body.department || 'Engineering & IT').trim();
-    const role = req.body.role === 'admin' ? 'admin' : 'technical';
+    const fullName = (body.full_name || body.fullName || query.full_name || query.fullName || '').trim();
+    const department = (body.department || query.department || 'Engineering & IT').trim();
+    const role = (body.role || query.role) === 'admin' ? 'admin' : 'technical';
 
     if (!email || !fullName) {
       return res.status(400).json({ success: false, error: 'Email and full name are required.' });
@@ -432,7 +435,7 @@ const authHandler = async (req, res) => {
   // 5. ADMIN PORTAL: UPDATE USER ROLE
   // -------------------------------------------------------------
   if (action === 'update-user-role') {
-    const role = req.body.role === 'admin' ? 'admin' : 'technical';
+    const role = (body.role || query.role) === 'admin' ? 'admin' : 'technical';
     try {
       await pool.query('UPDATE user_information SET role = ? WHERE email = ?', [role, email]);
       return res.json({ success: true, message: `Role updated to ${role}.` });
@@ -455,8 +458,8 @@ const authHandler = async (req, res) => {
 
   // SIGNUP
   if (action === 'signup') {
-    const fullName = (req.body.fullName || req.body.full_name || '').trim();
-    const department = (req.body.department || 'Human Resources (HR)').trim();
+    const fullName = (body.fullName || body.full_name || query.fullName || query.full_name || '').trim();
+    const department = (body.department || query.department || 'Human Resources (HR)').trim();
 
     if (!email || !password || !fullName) {
       return res.status(400).json({ success: false, error: 'Please complete all required fields.' });
@@ -591,7 +594,7 @@ const authHandler = async (req, res) => {
 
   // CHANGE / SET NEW PASSWORD
   if (action === 'change-password') {
-    const newPassword = req.body.newPassword || req.body.password;
+    const newPassword = body.newPassword || body.password || query.newPassword || query.password;
     if (!email || !newPassword) {
       return res.status(400).json({ success: false, error: 'Email and new password are required.' });
     }
@@ -621,7 +624,11 @@ const authHandler = async (req, res) => {
     }
   }
 
-  return res.status(400).json({ success: false, error: 'Unsupported action' });
+    return res.status(400).json({ success: false, error: 'Unsupported action' });
+  } catch (err) {
+    console.error('[Auth Controller Error]', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 };
 
 // Universal route handlers for all HTTP methods (GET, POST, etc.)

@@ -56,10 +56,16 @@ async function requestApi(action, options = {}) {
     }
   } else {
     const raw = await response.text();
-    // Static host or 404 handler
-    if (response.status === 404 || raw.includes('<!DOCTYPE') || raw.includes('<html')) {
+    if (response.status === 404) {
       throw new Error(
-        `Backend API not available on this domain (${response.status}). Static hosts like GitHub Pages do not execute PHP/Node. Pull this repository to your Hostinger server where PHP and MySQL are active.`
+        `Backend API endpoint not found on this domain (404). Please ensure the backend server is running and routes are configured.`
+      );
+    }
+    if (response.status >= 500 || raw.includes('<!DOCTYPE') || raw.includes('<html')) {
+      const match = raw.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i) || raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const extracted = match ? match[1].replace(/<[^>]+>/g, '').trim() : '';
+      throw new Error(
+        `Backend Server Error (${response.status})${extracted ? ': ' + extracted.slice(0, 100) : '. Database may be initializing. Please refresh in a few moments.'}`
       );
     }
     throw new Error(`Unexpected response (${response.status}): ${raw.slice(0, 120)}`);
