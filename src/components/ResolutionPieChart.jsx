@@ -58,7 +58,7 @@ export default function ResolutionPieChart({ stats, theme = 'dark' }) {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       
       {/* 1. Feedback Distribution Donut */}
-      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-lg transition-colors duration-200 flex flex-col justify-between">
+      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 sm:p-4 shadow-xs dark:shadow-md transition-colors duration-200 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
@@ -118,7 +118,7 @@ export default function ResolutionPieChart({ stats, theme = 'dark' }) {
       </div>
 
       {/* 2. Knowledge Sufficiency vs Escalations */}
-      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-lg transition-colors duration-200 flex flex-col justify-between">
+      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 sm:p-4 shadow-xs dark:shadow-md transition-colors duration-200 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">

@@ -741,8 +741,8 @@ export default function App() {
         logs={logs}
       />
 
-      {/* 2. Main Dashboard Content (Full Width Desktop Layout) */}
-      <main className="flex-1 w-full max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-6 space-y-6">
+      {/* 2. Main Dashboard Content (Compact Desktop Layout so Chart & Axes fit above fold) */}
+      <main className="flex-1 w-full max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-3.5 space-y-3.5">
         
         {/* Personal Scope Indicator for Technical Staff */}
         {!isAdmin && (() => {
@@ -753,7 +753,7 @@ export default function App() {
           const wasReset = userQuota.wasResetToday && !isExceeded;
 
           return (
-            <div className={`p-4 rounded-2xl border flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 text-xs transition-colors ${
+            <div className={`p-3 rounded-xl border flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 text-xs transition-colors ${
               isExceeded 
                 ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300' 
                 : isNear 

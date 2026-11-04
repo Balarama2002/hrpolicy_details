@@ -58,12 +58,12 @@ export default function TokenAnalyticsChart({ data = [], granularity = 'day', th
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-lg transition-colors duration-200">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+    <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 sm:p-4 shadow-xs dark:shadow-md transition-colors duration-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2">
         <div>
           <div className="flex items-center gap-2">
             <Cpu className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
               LLM Token Consumption Breakdown
             </h3>
             <InfoTooltip 
@@ -71,36 +71,36 @@ export default function TokenAnalyticsChart({ data = [], granularity = 'day', th
               description="Visualizes stacked Input (Prompt) vs Output (Completion) tokens consumed by AI models over the selected timeframe."
             />
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
             {granularity === 'hour'
               ? 'Hourly prompt & completion tokens consumed'
               : 'Input vs Output tokens per time window'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800">
           <Zap className="w-3.5 h-3.5 text-amber-500" />
           <span>Gemini 3.5 Flash Lite Rates</span>
         </div>
       </div>
 
-      <div className="h-[350px] w-full pt-1">
+      <div className="h-[250px] sm:h-[270px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 15, right: 15, left: 20, bottom: 35 }}>
+          <ComposedChart data={data} margin={{ top: 8, right: 12, left: 10, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
             <XAxis 
               dataKey="date" 
               stroke={tickColor} 
-              fontSize={11} 
+              fontSize={10} 
               tickLine={false} 
               axisLine={false} 
             >
               <Label 
                 value={granularity === 'hour' ? 'Timeline (Hour of Day)' : 'Timeline (Calendar Date)'} 
-                offset={-15} 
+                offset={-10} 
                 position="insideBottom" 
                 fill={axisLabelColor} 
-                fontSize={11} 
+                fontSize={10} 
                 fontWeight={600} 
               />
             </XAxis>
