@@ -21,13 +21,14 @@ import { useAuth } from './context/AuthContext';
 import AuthPage from './components/auth/AuthPage';
 import ForceResetPasswordModal from './components/auth/ForceResetPasswordModal';
 import AdminPortalModal from './components/admin/AdminPortalModal';
-import { checkAndDispatchQuotaAlerts, getQuotaConfig } from './services/quotaService';
-import { Bot, Loader2, Code2, Users, Bell, AlertTriangle, X } from 'lucide-react';
+import { checkAndDispatchQuotaAlerts, getQuotaConfig, syncQuotaConfigFromServer, evaluateUserDailyQuota } from './services/quotaService';
+import { Bot, Loader2, Code2, Users, Bell, AlertTriangle, RotateCcw, X } from 'lucide-react';
 
 export default function App() {
   const { isAuthenticated, user, isAdmin, mustResetPassword, isLoading: isAuthLoading } = useAuth();
   const [isAdminPortalOpen, setIsAdminPortalOpen] = useState(false);
   const [proactiveAlertNotice, setProactiveAlertNotice] = useState('');
+  const [quotaTick, setQuotaTick] = useState(0);
   const [config, setConfig] = useState(getStoredConfig());
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,6 +74,9 @@ export default function App() {
       const data = await fetchAuditLogs(config);
       setLogs(data);
 
+      // Synchronize latest quota limits and resets from database
+      syncQuotaConfigFromServer().then(() => setQuotaTick(t => t + 1)).catch(() => {});
+
       // Proactively check for daily message/token limit breaches & trigger Teams alerts
       checkAndDispatchQuotaAlerts(data).then((triggered) => {
         if (triggered && triggered.length > 0) {
@@ -106,6 +110,15 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [config]);
+
+  // Listen for Admin Quota Resets in real time
+  useEffect(() => {
+    const handleResetUpdate = () => {
+      setQuotaTick(t => t + 1);
+    };
+    window.addEventListener('quota_reset_updated', handleResetUpdate);
+    return () => window.removeEventListener('quota_reset_updated', handleResetUpdate);
+  }, []);
 
   // Reference Date: Always use the real current date (today) for presets,
   // or the explicitly selected single date if a single-day custom filter is active.
@@ -732,14 +745,10 @@ export default function App() {
         {/* Personal Scope Indicator for Technical Staff */}
         {!isAdmin && (() => {
           const qc = getQuotaConfig();
-          const tLimit = qc.dailyTokenLimit || 25000;
-          const qLimit = qc.dailyMessageLimit || 5;
-          const isTOver = stats.totalTokens >= tLimit;
-          const isQOver = stats.totalSearches >= qLimit;
-          const isTNear = !isTOver && (stats.totalTokens / tLimit) >= 0.85;
-          const isQNear = !isQOver && (stats.totalSearches / qLimit) >= 0.85;
-          const isExceeded = isTOver || isQOver;
-          const isNear = !isExceeded && (isTNear || isQNear);
+          const userQuota = evaluateUserDailyQuota(user, logs, qc);
+          const isExceeded = userQuota.isExceeded;
+          const isNear = userQuota.isNearLimit;
+          const wasReset = userQuota.wasResetToday && !isExceeded;
 
           return (
             <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs transition-colors ${
@@ -768,6 +777,10 @@ export default function App() {
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
                         Near Daily Limit (85%+)
                       </span>
+                    ) : wasReset ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
+                        <RotateCcw className="w-2.5 h-2.5" /> Quota Reset by Admin
+                      </span>
                     ) : null}
                   </div>
                   {isExceeded ? (
@@ -777,6 +790,10 @@ export default function App() {
                   ) : isNear ? (
                     <p className="text-[11px] opacity-90 mt-0.5 text-amber-600 dark:text-amber-400 font-medium">
                       You are approaching your daily allocated quota (85%+ used).
+                    </p>
+                  ) : wasReset ? (
+                    <p className="text-[11px] opacity-80 mt-0.5 text-cyan-600 dark:text-cyan-400 font-medium">
+                      Your quota has been refreshed by an Administrator. Usage counter is at 0.
                     </p>
                   ) : null}
                 </div>
@@ -846,7 +863,7 @@ export default function App() {
         />
 
         {/* 3. Hero Metric Cards (Including Top Token Consumer % share) */}
-        <KpiCards stats={stats} periodLabel={periodLabel} />
+        <KpiCards stats={stats} periodLabel={periodLabel} logs={logs} />
 
         {/* 4. Search Volume & Feedback Trend Chart */}
         <SearchTrendChart 

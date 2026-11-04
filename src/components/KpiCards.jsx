@@ -16,10 +16,10 @@ import {
 } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import { useAuth } from '../context/AuthContext';
-import { getQuotaConfig } from '../services/quotaService';
+import { getQuotaConfig, evaluateUserDailyQuota } from '../services/quotaService';
 
-export default function KpiCards({ stats, periodLabel }) {
-  const { isAdmin } = useAuth();
+export default function KpiCards({ stats, periodLabel, logs = [] }) {
+  const { isAdmin, user: currentUser } = useAuth();
   const {
     totalSearches = 0,
     helpfulCount = 0,
@@ -50,13 +50,17 @@ export default function KpiCards({ stats, periodLabel }) {
   const dailyTokenLimit = quotaConfig.dailyTokenLimit || 25000;
   const dailyMessageLimit = quotaConfig.dailyMessageLimit || 5;
 
-  const tokenPct = dailyTokenLimit > 0 ? Math.round((totalTokens / dailyTokenLimit) * 100) : 0;
-  const isTokenExceeded = !isAdmin && (tokenPct >= 100 || totalTokens >= dailyTokenLimit);
-  const isTokenNear = !isAdmin && !isTokenExceeded && tokenPct >= 85;
+  const userDailyQuota = evaluateUserDailyQuota(currentUser, logs, quotaConfig);
 
-  const queryPct = dailyMessageLimit > 0 ? Math.round((totalSearches / dailyMessageLimit) * 100) : 0;
-  const isQueryExceeded = !isAdmin && (queryPct >= 100 || totalSearches >= dailyMessageLimit);
-  const isQueryNear = !isAdmin && !isQueryExceeded && queryPct >= 85;
+  const tokenPct = userDailyQuota.tokenPercentage || 0;
+  const isTokenExceeded = !isAdmin && userDailyQuota.tokenExceeded;
+  const isTokenNear = !isAdmin && userDailyQuota.tokenNear;
+  const wasTokenReset = !isAdmin && userDailyQuota.wasResetToday && !isTokenExceeded;
+
+  const queryPct = userDailyQuota.queryPercentage || 0;
+  const isQueryExceeded = !isAdmin && userDailyQuota.queryExceeded;
+  const isQueryNear = !isAdmin && userDailyQuota.queryNear;
+  const wasQueryReset = !isAdmin && userDailyQuota.wasResetToday && !isQueryExceeded;
 
   return (
     <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
@@ -87,6 +91,10 @@ export default function KpiCards({ stats, periodLabel }) {
             ) : isQueryNear ? (
               <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                 Near Limit ({queryPct}%)
+              </span>
+            ) : wasQueryReset ? (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">
+                Reset
               </span>
             ) : null}
           </div>
@@ -259,6 +267,10 @@ export default function KpiCards({ stats, periodLabel }) {
             ) : isTokenNear ? (
               <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                 Near Limit ({tokenPct}%)
+              </span>
+            ) : wasTokenReset ? (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">
+                Reset by Admin (0%)
               </span>
             ) : null}
           </div>

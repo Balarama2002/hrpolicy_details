@@ -126,6 +126,10 @@ export function resetEmployeeQuota(employeeName) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ employeeName: employeeName.trim() }),
     }).catch(() => {});
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('quota_reset_updated', { detail: { employeeName, nowIso } }));
+    }
   } catch (e) {
     console.error('Failed to reset quota for employee:', e);
   }
@@ -156,6 +160,10 @@ export function resetAllEmployeeQuotas() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     }).catch(() => {});
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('quota_reset_updated', { detail: { all: true, nowIso } }));
+    }
   } catch (e) {
     console.error('Failed to reset all quotas:', e);
   }
@@ -374,6 +382,100 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
   });
 
   return results.sort((a, b) => b.todayTokens - a.todayTokens);
+}
+
+/**
+ * Synchronizes quota configuration and reset timestamps from the backend server
+ */
+export async function syncQuotaConfigFromServer() {
+  try {
+    const res = await fetch('/api/quota.php?action=get-config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.config) {
+        const serverConfig = data.config;
+        localStorage.setItem(QUOTA_CONFIG_KEY, JSON.stringify({
+          dailyMessageLimit: Number(serverConfig.dailyMessageLimit) || 5,
+          dailyTokenLimit: Number(serverConfig.dailyTokenLimit) || 25000,
+          alertIntervalHours: Number(serverConfig.alertIntervalHours) || 6,
+          teamsWebhookUrl: serverConfig.teamsWebhookUrl || DEFAULT_QUOTA_CONFIG.teamsWebhookUrl,
+        }));
+
+        if (serverConfig.resets && typeof serverConfig.resets === 'object') {
+          localStorage.setItem(QUOTA_RESETS_KEY, JSON.stringify(serverConfig.resets));
+        }
+        if (serverConfig.globalResetAt) {
+          localStorage.setItem('tgh_global_quota_reset_at', serverConfig.globalResetAt);
+        }
+        return data;
+      }
+    }
+  } catch (err) {}
+  return null;
+}
+
+/**
+ * Evaluates the daily quota status specifically for an individual user,
+ * taking into account admin quota resets.
+ */
+export function evaluateUserDailyQuota(user, logs = [], quotaConfig = getQuotaConfig()) {
+  if (!user) {
+    return {
+      isExceeded: false,
+      isNearLimit: false,
+      wasResetToday: false,
+      todayTokens: 0,
+      todayQueries: 0,
+      tokenPercentage: 0,
+      queryPercentage: 0,
+      tokenExceeded: false,
+      queryExceeded: false,
+      tokenNear: false,
+      queryNear: false,
+      status: 'Normal',
+    };
+  }
+
+  const userName = (user.full_name || user.name || user.email?.split('@')[0] || '').trim().toLowerCase();
+  const userEmail = (user.email || '').trim().toLowerCase();
+
+  const todayResults = evaluateTodayQuotaUsage(logs, quotaConfig);
+
+  // Find employee record by matching name or email
+  const match = todayResults.find((emp) => {
+    const eName = (emp.name || '').toLowerCase();
+    const eEmail = (emp.email || '').toLowerCase();
+    return (userName && (eName.includes(userName) || userName.includes(eName))) ||
+           (userEmail && eEmail === userEmail);
+  });
+
+  if (match) {
+    return match;
+  }
+
+  // Check if user was reset today even if they have 0 queries since reset
+  const resets = getEmployeeQuotaResets();
+  const empReset = resets[userName];
+  const globalResetAt = typeof localStorage !== 'undefined' ? localStorage.getItem('tgh_global_quota_reset_at') : null;
+  const wasResetToday = Boolean(empReset || globalResetAt);
+
+  return {
+    name: user.full_name || user.name || 'User',
+    email: user.email,
+    todayQueries: 0,
+    todayTokens: 0,
+    queryPercentage: 0,
+    tokenPercentage: 0,
+    queryExceeded: false,
+    tokenExceeded: false,
+    queryNear: false,
+    tokenNear: false,
+    isExceeded: false,
+    isNearLimit: false,
+    wasResetToday,
+    resetAt: empReset?.resetAt || globalResetAt || null,
+    status: wasResetToday ? 'Reset by Admin' : 'Normal',
+  };
 }
 
 // In-flight guard to prevent duplicate concurrent dispatches during async network requests
