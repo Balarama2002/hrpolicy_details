@@ -731,15 +731,30 @@ const quotaHandler = async (req, res) => {
       const targetName = userParam.toLowerCase();
       const targetEmail = emailParam.toLowerCase();
 
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayStartTime = todayStart.getTime();
+      // Compute today's start in IST (Asia/Kolkata, UTC+5:30) to exactly match India business hours and browser UI
+      let todayStartTime = 0;
+      try {
+        const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
+        const todayDateStr = formatter.format(new Date());
+        todayStartTime = new Date(`${todayDateStr}T00:00:00+05:30`).getTime();
+      } catch (e) {
+        const fallback = new Date();
+        fallback.setHours(0, 0, 0, 0);
+        todayStartTime = fallback.getTime();
+      }
 
       let todayQueries = 0;
       let todayTokens = 0;
 
-      const empReset = resets[targetName];
-      const empResetTime = empReset ? new Date(empReset.resetAt).getTime() : 0;
+      // Find user-specific reset timestamp if any
+      let empResetTime = 0;
+      for (const [key, resetObj] of Object.entries(resets || {})) {
+        const k = key.toLowerCase();
+        if (k === targetName || (targetName && (k.includes(targetName) || targetName.includes(k))) || (targetEmail && k === targetEmail)) {
+          const t = resetObj.timestamp || (resetObj.resetAt ? new Date(resetObj.resetAt).getTime() : 0);
+          if (t > empResetTime) empResetTime = t;
+        }
+      }
       const globalResetTime = settings.global_reset_at ? new Date(settings.global_reset_at).getTime() : 0;
 
       (logs || []).forEach(log => {

@@ -12,6 +12,7 @@
  */
 
 require_once __DIR__ . '/db.php';
+date_default_timezone_set('Asia/Kolkata');
 
 // JSON Input parsing
 $inputData = json_decode(file_get_contents('php://input'), true);
@@ -161,8 +162,14 @@ if ($action === 'check' || !empty($userParam) || !empty($emailParam)) {
     $tknLimit = $currentSettings['dailyTokenLimit'];
 
     $resets = $currentSettings['resets'] ?? [];
-    $empReset = $resets[$targetName] ?? null;
-    $empResetTime = $empReset ? strtotime($empReset['resetAt'] ?? 0) : 0;
+    $empResetTime = 0;
+    foreach ($resets as $k => $resetObj) {
+        $kLower = strtolower($k);
+        if ($kLower === $targetName || ($targetName && (strpos($kLower, $targetName) !== false || strpos($targetName, $kLower) !== false)) || ($targetEmail && $kLower === $targetEmail)) {
+            $t = !empty($resetObj['timestamp']) ? (int)($resetObj['timestamp'] / 1000) : (!empty($resetObj['resetAt']) ? strtotime($resetObj['resetAt']) : 0);
+            if ($t > $empResetTime) $empResetTime = $t;
+        }
+    }
 
     $globalResetTime = !empty($currentSettings['globalResetAt']) ? strtotime($currentSettings['globalResetAt']) : 0;
 
