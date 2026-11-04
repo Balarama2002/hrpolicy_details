@@ -21,7 +21,7 @@ import { useAuth } from './context/AuthContext';
 import AuthPage from './components/auth/AuthPage';
 import ForceResetPasswordModal from './components/auth/ForceResetPasswordModal';
 import AdminPortalModal from './components/admin/AdminPortalModal';
-import { checkAndDispatchQuotaAlerts } from './services/quotaService';
+import { checkAndDispatchQuotaAlerts, getQuotaConfig } from './services/quotaService';
 import { Bot, Loader2, Code2, Users, Bell, AlertTriangle, X } from 'lucide-react';
 
 export default function App() {
@@ -730,24 +730,64 @@ export default function App() {
       <main className="flex-1 w-full max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-6 space-y-6">
         
         {/* Personal Scope Indicator for Technical Staff */}
-        {!isAdmin && (
-          <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-blue-700 dark:text-blue-300 animate-fadeIn">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold shrink-0">
-                <Code2 className="w-4 h-4" />
+        {!isAdmin && (() => {
+          const qc = getQuotaConfig();
+          const tLimit = qc.dailyTokenLimit || 25000;
+          const qLimit = qc.dailyMessageLimit || 5;
+          const isTOver = stats.totalTokens >= tLimit;
+          const isQOver = stats.totalSearches >= qLimit;
+          const isTNear = !isTOver && (stats.totalTokens / tLimit) >= 0.85;
+          const isQNear = !isQOver && (stats.totalSearches / qLimit) >= 0.85;
+          const isExceeded = isTOver || isQOver;
+          const isNear = !isExceeded && (isTNear || isQNear);
+
+          return (
+            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs transition-colors ${
+              isExceeded 
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300' 
+                : isNear 
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300' 
+                : 'bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-300'
+            } animate-fadeIn`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold shrink-0 ${
+                  isExceeded ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400' : 
+                  isNear ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 
+                  'bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                }`}>
+                  {isExceeded ? <AlertTriangle className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
+                </div>
+                <div>
+                  <div className="font-bold flex items-center gap-2">
+                    <span>Technical Role Scope Active</span>
+                    {isExceeded ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse">
+                        Daily Quota Exceeded
+                      </span>
+                    ) : isNear ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                        Near Daily Limit (85%+)
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-[11px] opacity-80 mt-0.5">
+                    Displaying strictly your personal questions and token telemetry for <strong>{user?.full_name || user?.email}</strong>.
+                    {isExceeded && ' You have reached your allocated quota. Please reach out to HR for additional resources.'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <div className="font-bold">Technical Role Scope Active</div>
-                <p className="text-[11px] opacity-80 mt-0.5">
-                  Displaying strictly your personal questions and token telemetry for <strong>{user?.full_name || user?.email}</strong>.
-                </p>
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1 rounded-xl border text-xs font-bold font-mono ${
+                  isExceeded ? 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400' : 
+                  isNear ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400' : 
+                  'bg-blue-500/15 border-blue-500/30 text-blue-600 dark:text-blue-400'
+                }`}>
+                  {filteredLogs.length} Questions Found
+                </span>
               </div>
             </div>
-            <span className="px-3 py-1 rounded-xl bg-blue-500/15 border border-blue-500/30 text-xs font-bold font-mono">
-              {filteredLogs.length} Questions Found
-            </span>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Admin Proactive Quota Alert Notification Banner */}
         {isAdmin && proactiveAlertNotice && (
