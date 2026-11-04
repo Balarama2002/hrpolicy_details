@@ -256,11 +256,30 @@ const authHandler = async (req, res) => {
         [otp, user.id]
       );
 
-      // Send email via nodemailer
+      // Send OTP via n8n webhook first
+      const n8nWebhook = process.env.N8N_OTP_WEBHOOK_URL || 'https://n8n.srv1901759.hstgr.cloud/webhook/send-otp-email';
       try {
-        await sendTemporaryPasswordEmail(email, otp);
-      } catch (mailErr) {
-        console.error('[SMTP OTP Error]', mailErr.message);
+        await fetch(n8nWebhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'SEND_OTP',
+            email,
+            fullName: user.full_name,
+            role: user.role,
+            otp,
+            expiresInMinutes: 10,
+            timestamp: new Date().toISOString()
+          })
+        });
+        console.log(`[n8n Webhook OTP] Dispatched code to n8n for ${email}`);
+      } catch (webhookErr) {
+        // Fallback to SMTP
+        try {
+          await sendTemporaryPasswordEmail(email, otp);
+        } catch (mailErr) {
+          console.error('[SMTP OTP Error]', mailErr.message);
+        }
       }
 
       console.log(`[OTP] Generated 6-digit code for ${email}: ${otp}`);

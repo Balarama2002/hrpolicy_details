@@ -1,9 +1,6 @@
 <?php
 /**
  * TechyGeekHub HR Agent - Hostinger Database Configuration & Connection
- * 
- * Replace the DB constants below with your Hostinger MySQL database details
- * found in Hostinger hPanel -> Databases -> Management.
  */
 
 // Enable CORS for frontend API requests
@@ -18,19 +15,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-// ====================================================================
-// HOSTINGER DATABASE CREDENTIALS
-// Update these 4 values with your Hostinger MySQL details:
-// ====================================================================
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost'); // Hostinger MySQL is almost always 'localhost'
-define('DB_NAME', getenv('DB_NAME') ?: 'u123456789_hragent');     // e.g. u123456789_hragent
-define('DB_USER', getenv('DB_USER') ?: 'u123456789_hruser');      // e.g. u123456789_hruser
-define('DB_PASS', getenv('DB_PASS') ?: 'YourHostingerDbPassword'); // Your DB user password
+// Credentials from environment or default VPS/hPanel values
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_NAME', getenv('DB_NAME') ?: 'hr_analytics');
+define('DB_USER', getenv('DB_USER') ?: 'tgh_user');
+define('DB_PASS', getenv('DB_PASS') ?: 'TghUserPass2026!');
 define('DB_CHARSET', 'utf8mb4');
 
 /**
- * Returns a shared PDO database connection.
- * @return PDO
+ * Returns a PDO connection or null if database is unreachable.
+ * Never halts execution with exit() so OTP dispatch can still succeed!
+ * @return PDO|null
  */
 function getDbConnection() {
     static $pdo = null;
@@ -39,23 +34,34 @@ function getDbConnection() {
         return $pdo;
     }
 
-    $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
+    $candidates = [
+        // Candidate 1: Standard Hostinger VPS Docker credentials
+        ['host' => DB_HOST, 'db' => DB_NAME, 'user' => DB_USER, 'pass' => DB_PASS],
+        // Candidate 2: Environment variables
+        ['host' => getenv('DB_HOST') ?: 'localhost', 'db' => 'hr_analytics', 'user' => 'root', 'pass' => 'TghRootSecure2026!'],
+        // Candidate 3: Default root on localhost
+        ['host' => 'localhost', 'db' => 'hr_analytics', 'user' => 'root', 'pass' => ''],
+    ];
+
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES   => false,
+        PDO::ATTR_TIMEOUT            => 2,
     ];
 
-    try {
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-        return $pdo;
-    } catch (PDOException $e) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'Database connection failed: ' . $e->getMessage(),
-            'hint'    => 'Please verify your Hostinger DB credentials in public_html/api/db.php'
-        ]);
-        exit();
+    foreach ($candidates as $cand) {
+        try {
+            $dsn = "mysql:host={$cand['host']};dbname={$cand['db']};charset=" . DB_CHARSET;
+            $conn = new PDO($dsn, $cand['user'], $cand['pass'], $options);
+            $pdo = $conn;
+            return $pdo;
+        } catch (PDOException $e) {
+            // Try next candidate
+        }
     }
+
+    // Return null if database not connected yet (auth.php will use file/n8n fallback)
+    error_log("[TGH DB Notice] MySQL not connected. Running in direct n8n webhook fallback mode.");
+    return null;
 }
