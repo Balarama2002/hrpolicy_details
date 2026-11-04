@@ -337,16 +337,19 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
     const queryPct = dailyMessageLimit > 0 ? Math.round((emp.todayQueries / dailyMessageLimit) * 100) : 0;
     const tokenPct = dailyTokenLimit > 0 ? Math.round((emp.todayTokens / dailyTokenLimit) * 100) : 0;
 
-    const queryExceeded = emp.todayQueries > dailyMessageLimit;
-    const tokenExceeded = emp.todayTokens > dailyTokenLimit;
+    const queryExceeded = dailyMessageLimit > 0 && emp.todayQueries >= dailyMessageLimit;
+    const tokenExceeded = dailyTokenLimit > 0 && emp.todayTokens >= dailyTokenLimit;
     const isExceeded = queryExceeded || tokenExceeded;
+
+    const queryNear = !queryExceeded && queryPct >= 85;
+    const tokenNear = !tokenExceeded && tokenPct >= 85;
+    const isNearLimit = !isExceeded && (queryNear || tokenNear);
 
     let exceededMetric = 'none';
     if (queryExceeded && tokenExceeded) exceededMetric = 'both';
     else if (queryExceeded) exceededMetric = 'queries';
     else if (tokenExceeded) exceededMetric = 'tokens';
 
-    const isNearLimit = !isExceeded && (queryPct >= 80 || tokenPct >= 80);
     const empReset = resets[emp.name.toLowerCase()];
     const wasReset = Boolean(empReset || globalResetTime > 0);
 
@@ -359,6 +362,8 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
       tokenPercentage: tokenPct,
       queryExceeded,
       tokenExceeded,
+      queryNear,
+      tokenNear,
       isExceeded,
       isNearLimit,
       exceededMetric,

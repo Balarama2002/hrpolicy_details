@@ -762,15 +762,22 @@ const quotaHandler = async (req, res) => {
       const tokensExceeded = (tknLimit > 0 && todayTokens >= tknLimit);
       const isExceeded = queriesExceeded || tokensExceeded;
 
+      const queryPct = msgLimit > 0 ? Math.round((todayQueries / msgLimit) * 100) : 0;
+      const tokenPct = tknLimit > 0 ? Math.round((todayTokens / tknLimit) * 100) : 0;
+      const isNearLimit = !isExceeded && (queryPct >= 85 || tokenPct >= 85);
+
       if (isExceeded) {
         const limitDesc = queriesExceeded ? `${todayQueries}/${msgLimit} questions` : `${todayTokens.toLocaleString()} / ${tknLimit.toLocaleString()} tokens`;
         return res.json({
           allowed: false,
+          status: 'EXCEEDED',
           reason: queriesExceeded ? 'DAILY_MESSAGE_LIMIT_REACHED' : 'DAILY_TOKEN_LIMIT_REACHED',
           employee: userParam || emailParam,
           todayQueries,
+          queryPercentage: queryPct,
           dailyMessageLimit: msgLimit,
           todayTokens,
+          tokenPercentage: tokenPct,
           dailyTokenLimit: tknLimit,
           replyMessage: `⚠️ **Daily Quota Exceeded**: You have used your daily allowance (${limitDesc}). Your request was paused to conserve resources. Please contact the HR team for additional access.`,
           timestamp: new Date().toISOString(),
@@ -779,11 +786,15 @@ const quotaHandler = async (req, res) => {
 
       return res.json({
         allowed: true,
+        status: isNearLimit ? 'NEAR_LIMIT' : 'NORMAL',
+        nearLimit: isNearLimit,
         employee: userParam || emailParam,
         todayQueries,
+        queryPercentage: queryPct,
         remainingQueries: Math.max(0, msgLimit - todayQueries),
         dailyMessageLimit: msgLimit,
         todayTokens,
+        tokenPercentage: tokenPct,
         remainingTokens: Math.max(0, tknLimit - todayTokens),
         dailyTokenLimit: tknLimit,
         timestamp: new Date().toISOString(),

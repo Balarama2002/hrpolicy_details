@@ -207,6 +207,10 @@ if ($action === 'check') {
     $tokensExceeded = ($tknLimit > 0 && $todayTokens >= $tknLimit);
     $isExceeded = $queriesExceeded || $tokensExceeded;
 
+    $queryPct = $msgLimit > 0 ? (int)round(($todayQueries / $msgLimit) * 100) : 0;
+    $tokenPct = $tknLimit > 0 ? (int)round(($todayTokens / $tknLimit) * 100) : 0;
+    $isNearLimit = !$isExceeded && ($queryPct >= 85 || $tokenPct >= 85);
+
     if ($isExceeded) {
         $reason = $queriesExceeded ? 'DAILY_MESSAGE_LIMIT_REACHED' : 'DAILY_TOKEN_LIMIT_REACHED';
         $limitStr = $queriesExceeded 
@@ -215,11 +219,14 @@ if ($action === 'check') {
 
         echo json_encode([
             'allowed'          => false,
+            'status'           => 'EXCEEDED',
             'reason'           => $reason,
             'employee'         => $userParam ?: $emailParam,
             'todayQueries'     => $todayQueries,
+            'queryPercentage'  => $queryPct,
             'dailyMessageLimit'=> $msgLimit,
             'todayTokens'      => $todayTokens,
+            'tokenPercentage'  => $tokenPct,
             'dailyTokenLimit'  => $tknLimit,
             'replyMessage'     => "⚠️ **Daily Quota Exceeded**: You have utilized your daily allowance ({$limitStr}). Your request has been paused to conserve resources. Please reach out to your HR Team for additional quota access.",
             'timestamp'        => date('c'),
@@ -229,11 +236,15 @@ if ($action === 'check') {
 
     echo json_encode([
         'allowed'           => true,
+        'status'            => $isNearLimit ? 'NEAR_LIMIT' : 'NORMAL',
+        'nearLimit'         => $isNearLimit,
         'employee'          => $userParam ?: $emailParam,
         'todayQueries'      => $todayQueries,
+        'queryPercentage'   => $queryPct,
         'remainingQueries'  => max(0, $msgLimit - $todayQueries),
         'dailyMessageLimit' => $msgLimit,
         'todayTokens'       => $todayTokens,
+        'tokenPercentage'   => $tokenPct,
         'remainingTokens'   => max(0, $tknLimit - $todayTokens),
         'dailyTokenLimit'   => $tknLimit,
         'timestamp'         => date('c'),
