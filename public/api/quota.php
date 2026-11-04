@@ -138,13 +138,13 @@ function fetchTodayAuditLogs() {
 $pdo = getDbConnection();
 $currentSettings = loadQuotaSettings($pdo, $DEFAULT_SETTINGS, $CONFIG_FILE);
 
-// -----------------------------------------------------------------------------
-// 1. ACTION: CHECK (Pre-flight Gate for n8n & MS Teams)
-// -----------------------------------------------------------------------------
-if ($action === 'check') {
-    $userParam = trim($_GET['user'] ?? ($inputData['user'] ?? ''));
-    $emailParam = trim($_GET['email'] ?? ($inputData['email'] ?? ''));
+$userParam = trim(trim($_GET['user'] ?? ($inputData['user'] ?? '')), "\"\'");
+$emailParam = trim(trim($_GET['email'] ?? ($inputData['email'] ?? '')), "\"\'");
 
+// -----------------------------------------------------------------------------
+// 1. ACTION: CHECK / USER TOKENS (Pre-flight Gate for n8n & MS Teams)
+// -----------------------------------------------------------------------------
+if ($action === 'check' || !empty($userParam) || !empty($emailParam)) {
     if (empty($userParam) && empty($emailParam)) {
         http_response_code(400);
         echo json_encode([

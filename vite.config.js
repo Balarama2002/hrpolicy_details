@@ -668,8 +668,10 @@ function devApiPlugin() {
             try {
               const body = bodyText ? JSON.parse(bodyText) : {};
               const reqAction = action || body.action || 'check';
+              const userParam = (urlObj.searchParams.get('user') || body.user || '').trim().replace(/^["']|["']$/g, '');
+              const emailParam = (urlObj.searchParams.get('email') || body.email || '').trim().replace(/^["']|["']$/g, '');
 
-              if (reqAction === 'get-config' || reqAction === 'config' || reqAction === 'tokens' || reqAction === 'get-tokens' || reqAction === 'limits') {
+              if (!userParam && !emailParam && (reqAction === 'get-config' || reqAction === 'config' || reqAction === 'tokens' || reqAction === 'get-tokens' || reqAction === 'limits')) {
                 res.end(JSON.stringify({
                   success: true,
                   dailyTokenLimit: devQuotaConfig.dailyTokenLimit,
@@ -710,9 +712,8 @@ function devApiPlugin() {
                 return;
               }
 
-              // Check action (Pre-flight gate for n8n/Teams bot)
-              if (reqAction === 'check') {
-                const userParam = (urlObj.searchParams.get('user') || body.user || '').trim();
+              // Check action or User tokens usage (Pre-flight gate for n8n/Teams bot)
+              if (reqAction === 'check' || reqAction === 'tokens' || reqAction === 'usage' || userParam || emailParam) {
                 const emailParam = (urlObj.searchParams.get('email') || body.email || '').trim();
 
                 if (!userParam && !emailParam) {

@@ -661,7 +661,11 @@ const quotaHandler = async (req, res) => {
     const msgLimit = Number(settings.daily_message_limit) || 5;
     const tknLimit = Number(settings.daily_token_limit) || 25000;
 
-    if (action === 'get-config' || action === 'config' || action === 'tokens' || action === 'get-tokens' || action === 'limits') {
+    const userParam = (req.query.user || req.body?.user || '').trim().replace(/^["']|["']$/g, '');
+    const emailParam = (req.query.email || req.body?.email || '').trim().replace(/^["']|["']$/g, '');
+
+    // Return general config/token limits ONLY when no specific user is passed
+    if (!userParam && !emailParam && (action === 'get-config' || action === 'config' || action === 'tokens' || action === 'get-tokens' || action === 'limits')) {
       return res.json({
         success: true,
         dailyTokenLimit: tknLimit,
@@ -711,13 +715,10 @@ const quotaHandler = async (req, res) => {
       return res.json({ success: true, message: 'All quotas reset to 0 in database' });
     }
 
-    // Pre-flight Check for n8n/Teams bot
-    if (action === 'check') {
-      const userParam = (req.query.user || req.body?.user || '').trim();
-      const emailParam = (req.query.email || req.body?.email || '').trim();
-
+    // User Telemetry & Pre-flight Gate Check (Supports action=check, tokens, get-tokens, usage, or any query with user/email)
+    if (action === 'check' || action === 'tokens' || action === 'get-tokens' || action === 'usage' || userParam || emailParam) {
       if (!userParam && !emailParam) {
-        return res.status(400).json({ allowed: true, error: 'User identifier required' });
+        return res.status(400).json({ allowed: true, error: 'User identifier required (pass ?user=name or ?email=email)' });
       }
 
       // Fetch live audit logs from n8n webhook
