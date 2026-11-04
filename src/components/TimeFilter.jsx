@@ -156,13 +156,13 @@ export default function TimeFilter({
   };
 
   return (
-    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 bg-white dark:bg-slate-900/60 py-1.5 px-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs dark:shadow-none transition-colors duration-200">
+    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white dark:bg-slate-900/60 py-2.5 px-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none transition-colors duration-200">
       
       {/* 1. Interactive Calendar Date Picker with Dropdown Popover & [Submit] Button */}
       <div className="flex flex-wrap items-center gap-2.5 relative" ref={popoverRef}>
         
         {/* Date Input Box & Calendar Toggle */}
-        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 shadow-2xs">
+        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 shadow-sm">
           
           <button
             type="button"
@@ -243,7 +243,7 @@ export default function TimeFilter({
           <button
             type="button"
             onClick={handleSubmit}
-            className="px-2.5 py-0.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-md text-xs transition-colors shadow-xs cursor-pointer ml-1"
+            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-lg text-xs transition-colors shadow-sm cursor-pointer ml-1"
           >
             Submit
           </button>
@@ -369,7 +369,7 @@ export default function TimeFilter({
                   onSelectPreset(preset.id);
                   setIsCalendarOpen(false);
                 }}
-                className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700/60'

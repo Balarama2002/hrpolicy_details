@@ -70,12 +70,12 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
   const axisLabelColor = isDark ? '#cbd5e1' : '#475569';
 
   return (
-    <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 sm:p-4 shadow-xs dark:shadow-md transition-colors duration-200">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2">
+    <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm dark:shadow-lg transition-colors duration-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
         <div>
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
               Search Volume & Usefulness Trend
             </h3>
             <InfoTooltip 
@@ -83,7 +83,7 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
               description="Visualizes query volume over chronological time windows broken down by employee feedback: Helpful 👍, Not Helpful 👎, Ticket Raised 🎟️, and Unrated."
             />
           </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {granularity === 'hour' 
               ? 'Hourly breakdown across today with feedback distribution'
               : 'Volume of HR questions and employee feedback over time'}
@@ -91,10 +91,10 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
         </div>
 
         {/* Chart type toggle */}
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 self-start sm:self-auto">
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950/80 p-1 rounded-lg border border-slate-200 dark:border-slate-800 self-start sm:self-auto">
           <button
             onClick={() => setChartType('area')}
-            className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
               chartType === 'area'
                 ? 'bg-blue-600 text-white shadow-sm font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -104,7 +104,7 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
           </button>
           <button
             onClick={() => setChartType('bar')}
-            className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
               chartType === 'bar'
                 ? 'bg-blue-600 text-white shadow-sm font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -115,10 +115,10 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
         </div>
       </div>
 
-      <div className="h-[240px] sm:h-[260px] lg:h-[275px] w-full">
+      <div className="h-[270px] sm:h-[285px] lg:h-[300px] w-full pt-1">
         <ResponsiveContainer width="100%" height="100%">
           {chartType === 'area' ? (
-            <AreaChart data={data} margin={{ top: 8, right: 12, left: 4, bottom: 20 }}>
+            <AreaChart data={data} margin={{ top: 10, right: 14, left: 4, bottom: 25 }}>
               <defs>
                 <linearGradient id="colorHelpful" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
@@ -224,7 +224,7 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
               />
             </AreaChart>
           ) : (
-            <BarChart data={data} margin={{ top: 8, right: 12, left: 4, bottom: 20 }}>
+            <BarChart data={data} margin={{ top: 10, right: 14, left: 4, bottom: 25 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
               <XAxis 
                 dataKey="date" 
