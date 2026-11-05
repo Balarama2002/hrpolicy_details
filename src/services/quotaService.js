@@ -282,6 +282,70 @@ export async function dispatchTeamsQuotaAlert(alertData, webhookUrl = DEFAULT_QU
 }
 
 /**
+ * Universal flexible matcher between a user (from auth object or name/email string)
+ * and an audit log / employee record. Handles name order inversions
+ * (e.g. "Bala Rama Cherukuri" vs "Cherukuri Bala Rama Krishna"),
+ * email prefixes (e.g. "cbala" or "bala"), and corporate domain aliases.
+ */
+export function matchesUserIdentifier(user, candidateName = '', candidateEmail = '') {
+  if (!user) return false;
+
+  // Extract user identifiers
+  const userFullName = (
+    typeof user === 'string' 
+      ? user 
+      : (user.full_name || user.user_metadata?.full_name || user.name || '')
+  ).trim().toLowerCase();
+
+  const userEmail = (
+    typeof user === 'object' && user.email 
+      ? user.email 
+      : (userFullName.includes('@') ? userFullName : '')
+  ).trim().toLowerCase();
+
+  const usernamePart = userEmail ? userEmail.split('@')[0].toLowerCase() : '';
+
+  const cName = String(candidateName || '').trim().toLowerCase();
+  const cEmail = String(candidateEmail || '').trim().toLowerCase();
+  const cUsername = cEmail ? cEmail.split('@')[0].toLowerCase() : '';
+
+  // 1. Direct corporate email match
+  if (userEmail && cEmail && userEmail === cEmail) return true;
+
+  // 2. Direct string equality or exact substring
+  if (userFullName && cName) {
+    if (userFullName === cName) return true;
+    if (cName.includes(userFullName) || userFullName.includes(cName)) return true;
+  }
+
+  // 3. Multi-word token overlap (handles inverted name components e.g. "Bala Rama Cherukuri" <-> "Cherukuri Bala Rama Krishna")
+  if (userFullName && cName) {
+    const userWords = userFullName.split(/\s+/).filter(w => w.length >= 3);
+    const candWords = cName.split(/\s+/).filter(w => w.length >= 3);
+
+    if (userWords.length > 0 && candWords.length > 0) {
+      const matches = userWords.filter(w => candWords.includes(w) || cName.includes(w));
+      if (matches.length >= 1 && (userWords.some(w => cName.includes(w)) || candWords.some(w => userFullName.includes(w)))) {
+        return true;
+      }
+    }
+  }
+
+  // 4. Email username prefix vs candidate name or email
+  if (usernamePart && cName) {
+    if (cName.includes(usernamePart) || usernamePart.includes(cName)) return true;
+  }
+  if (cUsername && userFullName) {
+    if (userFullName.includes(cUsername) || cUsername.includes(userFullName)) return true;
+  }
+  if (usernamePart && cEmail) {
+    if (cEmail.startsWith(usernamePart) || (cUsername && usernamePart.startsWith(cUsername))) return true;
+  }
+
+  return false;
+}
+
+/**
  * Aggregates today's usage per employee and evaluates against daily limits.
  * Honors Admin Quota Resets: queries made prior to an admin reset are excluded.
  */
@@ -325,12 +389,15 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
       // Check global admin reset: ignore logs that occurred prior to global reset
       if (globalResetTime && logTime <= globalResetTime) return;
 
-      // Check per-employee admin reset: ignore logs that occurred prior to reset
-      const empReset = resets[name.toLowerCase()];
-      if (empReset) {
-        const empResetTime = empReset.resetTimestamp || new Date(empReset.resetAt).getTime();
-        if (logTime <= empResetTime) return;
+      // Check per-employee admin reset using fuzzy matching on name/email
+      let empResetTime = 0;
+      for (const [key, resetObj] of Object.entries(resets || {})) {
+        if (matchesUserIdentifier(key, name, email)) {
+          const t = resetObj?.resetTimestamp || (resetObj?.resetAt ? new Date(resetObj.resetAt).getTime() : 0);
+          if (t > empResetTime) empResetTime = t;
+        }
       }
+      if (empResetTime && logTime <= empResetTime) return;
 
       employeeUsage[name].todayQueries++;
       const rowTokens = log.totalTokens || ((log.promptTokens || 0) + (log.completionTokens || 0)) || 0;
@@ -358,7 +425,13 @@ export function evaluateTodayQuotaUsage(logs = [], quotaConfig = getQuotaConfig(
     else if (queryExceeded) exceededMetric = 'queries';
     else if (tokenExceeded) exceededMetric = 'tokens';
 
-    const empReset = resets[emp.name.toLowerCase()];
+    let empReset = null;
+    for (const [key, resetObj] of Object.entries(resets || {})) {
+      if (matchesUserIdentifier(key, emp.name, emp.email)) {
+        empReset = resetObj;
+        break;
+      }
+    }
     const wasReset = Boolean(empReset || globalResetTime > 0);
 
     return {
@@ -416,16 +489,20 @@ export async function syncQuotaConfigFromServer() {
 
 /**
  * Evaluates the daily quota status specifically for an individual user,
- * taking into account admin quota resets.
+ * directly matching all personal queries for today and honoring admin quota resets.
  */
-export function evaluateUserDailyQuota(user, logs = [], quotaConfig = getQuotaConfig()) {
+export function evaluateUserDailyQuota(user, logs = [], quotaConfig = getQuotaConfig(), refDate = new Date()) {
   if (!user) {
     return {
+      name: 'User',
+      email: '',
       isExceeded: false,
       isNearLimit: false,
       wasResetToday: false,
       todayTokens: 0,
       todayQueries: 0,
+      promptTokens: 0,
+      completionTokens: 0,
       tokenPercentage: 0,
       queryPercentage: 0,
       tokenExceeded: false,
@@ -436,47 +513,103 @@ export function evaluateUserDailyQuota(user, logs = [], quotaConfig = getQuotaCo
     };
   }
 
-  const userName = (user.full_name || user.name || user.email?.split('@')[0] || '').trim().toLowerCase();
-  const userEmail = (user.email || '').trim().toLowerCase();
+  const { dailyMessageLimit = 5, dailyTokenLimit = 25000 } = quotaConfig;
+  const resets = getEmployeeQuotaResets();
+  const globalResetAt = typeof localStorage !== 'undefined' ? localStorage.getItem('tgh_global_quota_reset_at') : null;
+  const globalResetTime = globalResetAt ? new Date(globalResetAt).getTime() : 0;
 
-  const todayResults = evaluateTodayQuotaUsage(logs, quotaConfig);
-
-  // Find employee record by matching name or email
-  const match = todayResults.find((emp) => {
-    const eName = (emp.name || '').toLowerCase();
-    const eEmail = (emp.email || '').toLowerCase();
-    return (userName && (eName.includes(userName) || userName.includes(eName))) ||
-           (userEmail && eEmail === userEmail);
-  });
-
-  if (match) {
-    return match;
+  // Find user's admin reset record if any
+  let empResetTime = 0;
+  let userResetRecord = null;
+  for (const [key, resetObj] of Object.entries(resets || {})) {
+    if (matchesUserIdentifier(user, key, resetObj?.email || '')) {
+      const t = resetObj?.resetTimestamp || (resetObj?.resetAt ? new Date(resetObj.resetAt).getTime() : 0);
+      if (t > empResetTime) {
+        empResetTime = t;
+        userResetRecord = resetObj;
+      }
+    }
   }
 
-  // Check if user was reset today even if they have 0 queries since reset
-  const resets = getEmployeeQuotaResets();
-  const empReset = resets[userName];
-  const globalResetAt = typeof localStorage !== 'undefined' ? localStorage.getItem('tgh_global_quota_reset_at') : null;
-  const wasResetToday = Boolean(empReset || globalResetAt);
+  const refYear = refDate.getFullYear();
+  const refMonth = refDate.getMonth();
+  const refDay = refDate.getDate();
+
+  let todayQueries = 0;
+  let todayTokens = 0;
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let rawTotalQueries = 0;
+  let matchedEmployeeName = '';
+  let matchedEmployeeEmail = '';
+
+  // Aggregate user's personal logs for today
+  logs.forEach((log) => {
+    const logName = (log.name || log.NAME || log.user_name || log.EmployeeName || '').trim();
+    const logEmail = (log.user_email || log.EMAIL || log.email || '').trim();
+
+    if (matchesUserIdentifier(user, logName, logEmail)) {
+      if (!matchedEmployeeName && logName) matchedEmployeeName = logName;
+      if (!matchedEmployeeEmail && logEmail) matchedEmployeeEmail = logEmail;
+
+      const d = new Date(log.createdAt);
+      if (d.getFullYear() === refYear && d.getMonth() === refMonth && d.getDate() === refDay) {
+        rawTotalQueries++;
+        const logTime = d.getTime();
+
+        // Admin resets: ignore queries prior to reset
+        if (globalResetTime && logTime <= globalResetTime) return;
+        if (empResetTime && logTime <= empResetTime) return;
+
+        todayQueries++;
+        const rowTokens = log.totalTokens || ((log.promptTokens || 0) + (log.completionTokens || 0)) || 0;
+        todayTokens += rowTokens;
+        promptTokens += (log.promptTokens || 0);
+        completionTokens += (log.completionTokens || 0);
+      }
+    }
+  });
+
+  const queryPct = dailyMessageLimit > 0 ? Math.round((todayQueries / dailyMessageLimit) * 100) : 0;
+  const tokenPct = dailyTokenLimit > 0 ? Math.round((todayTokens / dailyTokenLimit) * 100) : 0;
+
+  const queryExceeded = dailyMessageLimit > 0 && todayQueries >= dailyMessageLimit;
+  const tokenExceeded = dailyTokenLimit > 0 && todayTokens >= dailyTokenLimit;
+  const isExceeded = queryExceeded || tokenExceeded;
+
+  const queryNear = !queryExceeded && queryPct >= 85;
+  const tokenNear = !tokenExceeded && tokenPct >= 85;
+  const isNearLimit = !isExceeded && (queryNear || tokenNear);
+
+  let exceededMetric = 'none';
+  if (queryExceeded && tokenExceeded) exceededMetric = 'both';
+  else if (queryExceeded) exceededMetric = 'queries';
+  else if (tokenExceeded) exceededMetric = 'tokens';
+
+  const wasResetToday = Boolean(userResetRecord || globalResetTime > 0);
 
   return {
-    name: user.full_name || user.name || 'User',
-    email: user.email,
-    todayQueries: 0,
-    todayTokens: 0,
-    queryLimit: quotaConfig.dailyMessageLimit || 5,
-    tokenLimit: quotaConfig.dailyTokenLimit || 25000,
-    queryPercentage: 0,
-    tokenPercentage: 0,
-    queryExceeded: false,
-    tokenExceeded: false,
-    queryNear: false,
-    tokenNear: false,
-    isExceeded: false,
-    isNearLimit: false,
+    name: matchedEmployeeName || user.full_name || user.name || 'User',
+    email: matchedEmployeeEmail || user.email,
+    todayQueries,
+    todayTokens,
+    promptTokens,
+    completionTokens,
+    rawTotalQueries,
+    queryLimit: dailyMessageLimit,
+    tokenLimit: dailyTokenLimit,
+    queryPercentage: queryPct,
+    tokenPercentage: tokenPct,
+    queryExceeded,
+    tokenExceeded,
+    queryNear,
+    tokenNear,
+    isExceeded,
+    isNearLimit,
+    exceededMetric,
     wasResetToday,
-    resetAt: empReset?.resetAt || globalResetAt || null,
-    status: wasResetToday ? 'Reset by Admin' : 'Normal',
+    resetAt: userResetRecord?.resetAt || globalResetAt || null,
+    status: wasResetToday && !isExceeded ? 'Reset by Admin' : isExceeded ? 'Exceeded' : isNearLimit ? 'Near Limit' : 'Normal',
   };
 }
 

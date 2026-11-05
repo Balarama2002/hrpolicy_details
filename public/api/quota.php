@@ -162,10 +162,23 @@ if ($action === 'check' || !empty($userParam) || !empty($emailParam)) {
     $tknLimit = $currentSettings['dailyTokenLimit'];
 
     $resets = $currentSettings['resets'] ?? [];
+    $fuzzyMatch = function($target, $cand) {
+        if (empty($target) || empty($cand)) return false;
+        if ($target === $cand || strpos($cand, $target) !== false || strpos($target, $cand) !== false) return true;
+        $tWords = array_filter(preg_split('/\s+/', $target), function($w) { return strlen($w) >= 3; });
+        $cWords = array_filter(preg_split('/\s+/', $cand), function($w) { return strlen($w) >= 3; });
+        if (!empty($tWords) && !empty($cWords)) {
+            $overlap = array_intersect($tWords, $cWords);
+            if (!empty($overlap)) return true;
+        }
+        return false;
+    };
+
     $empResetTime = 0;
     foreach ($resets as $k => $resetObj) {
         $kLower = strtolower($k);
-        if ($kLower === $targetName || ($targetName && (strpos($kLower, $targetName) !== false || strpos($targetName, $kLower) !== false)) || ($targetEmail && $kLower === $targetEmail)) {
+        $isMatch = $fuzzyMatch($targetName, $kLower) || ($targetEmail && ($kLower === $targetEmail || strpos($kLower, $targetEmail) !== false));
+        if ($isMatch) {
             $t = !empty($resetObj['timestamp']) ? (int)($resetObj['timestamp'] / 1000) : (!empty($resetObj['resetAt']) ? strtotime($resetObj['resetAt']) : 0);
             if ($t > $empResetTime) $empResetTime = $t;
         }
@@ -186,9 +199,9 @@ if ($action === 'check' || !empty($userParam) || !empty($emailParam)) {
 
         // Check matching employee
         $matches = false;
-        if ($targetName && (strpos($logName, $targetName) !== false || strpos($targetName, $logName) !== false)) {
+        if ($targetName && $fuzzyMatch($targetName, $logName)) {
             $matches = true;
-        } elseif ($targetEmail && $logEmail === $targetEmail) {
+        } elseif ($targetEmail && ($logEmail === $targetEmail || strpos($logEmail, $targetEmail) !== false || strpos($targetEmail, $logEmail) !== false)) {
             $matches = true;
         }
 

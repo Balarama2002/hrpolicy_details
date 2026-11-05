@@ -746,11 +746,25 @@ const quotaHandler = async (req, res) => {
       let todayQueries = 0;
       let todayTokens = 0;
 
+      // Helper for fuzzy multi-word token overlap
+      const checkFuzzyMatch = (target, cand) => {
+        if (!target || !cand) return false;
+        if (target === cand || cand.includes(target) || target.includes(cand)) return true;
+        const targetWords = target.split(/\s+/).filter(w => w.length >= 3);
+        const candWords = cand.split(/\s+/).filter(w => w.length >= 3);
+        if (targetWords.length > 0 && candWords.length > 0) {
+          const common = targetWords.filter(w => candWords.includes(w) || cand.includes(w));
+          if (common.length >= 1) return true;
+        }
+        return false;
+      };
+
       // Find user-specific reset timestamp if any
       let empResetTime = 0;
       for (const [key, resetObj] of Object.entries(resets || {})) {
         const k = key.toLowerCase();
-        if (k === targetName || (targetName && (k.includes(targetName) || targetName.includes(k))) || (targetEmail && k === targetEmail)) {
+        const isMatch = checkFuzzyMatch(targetName, k) || (targetEmail && (k === targetEmail || k.includes(targetEmail)));
+        if (isMatch) {
           const t = resetObj.timestamp || (resetObj.resetAt ? new Date(resetObj.resetAt).getTime() : 0);
           if (t > empResetTime) empResetTime = t;
         }
@@ -760,8 +774,8 @@ const quotaHandler = async (req, res) => {
       (logs || []).forEach(log => {
         const logName = String(log.NAME || log.name || log.EmployeeName || '').toLowerCase();
         const logEmail = String(log.EMAIL || log.email || '').toLowerCase();
-        const matches = (targetName && (logName.includes(targetName) || targetName.includes(logName))) ||
-                        (targetEmail && logEmail === targetEmail);
+        const matches = (targetName && checkFuzzyMatch(targetName, logName)) ||
+                        (targetEmail && (logEmail === targetEmail || logEmail.includes(targetEmail) || targetEmail.includes(logEmail)));
 
         if (matches) {
           const logTime = log.createdAt ? new Date(log.createdAt).getTime() : Date.now();
