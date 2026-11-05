@@ -86,7 +86,7 @@ export default function TokenAnalyticsChart({ data = [], granularity = 'day', th
 
       <div className="h-[250px] sm:h-[270px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 8, right: 12, left: 10, bottom: 20 }}>
+          <ComposedChart data={data} margin={{ top: 8, right: 12, left: 16, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
             <XAxis 
               dataKey="date" 
@@ -96,7 +96,7 @@ export default function TokenAnalyticsChart({ data = [], granularity = 'day', th
               axisLine={false} 
             >
               <Label 
-                value={granularity === 'hour' ? 'Timeline (Hour of Day)' : 'Timeline (Calendar Date)'} 
+                value="Timeline" 
                 offset={-10} 
                 position="insideBottom" 
                 fill={axisLabelColor} 
@@ -111,14 +111,15 @@ export default function TokenAnalyticsChart({ data = [], granularity = 'day', th
               tickLine={false} 
               axisLine={false}
               tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}
+              width={42}
             >
               <Label 
                 value="Tokens (Prompt + Completion)" 
                 angle={-90} 
                 position="insideLeft" 
-                offset={-10} 
+                offset={-2} 
                 fill={axisLabelColor} 
-                fontSize={11} 
+                fontSize={10} 
                 fontWeight={600} 
                 style={{ textAnchor: 'middle' }}
               />

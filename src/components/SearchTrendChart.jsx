@@ -118,7 +118,7 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
       <div className="h-[270px] sm:h-[285px] lg:h-[300px] w-full pt-1">
         <ResponsiveContainer width="100%" height="100%">
           {chartType === 'area' ? (
-            <AreaChart data={data} margin={{ top: 10, right: 14, left: 4, bottom: 25 }}>
+            <AreaChart data={data} margin={{ top: 10, right: 14, left: 16, bottom: 25 }}>
               <defs>
                 <linearGradient id="colorHelpful" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
@@ -146,7 +146,7 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
                 axisLine={false}
               >
                 <Label 
-                  value={granularity === 'hour' ? 'Timeline (Hour of Day)' : 'Timeline (Calendar Date)'} 
+                  value="Timeline" 
                   offset={-10} 
                   position="insideBottom" 
                   fill={axisLabelColor} 
@@ -160,12 +160,13 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
                 tickLine={false} 
                 axisLine={false} 
                 allowDecimals={false}
+                width={36}
               >
                 <Label 
                   value="Search Query Count" 
                   angle={-90} 
                   position="insideLeft" 
-                  offset={-5} 
+                  offset={-2} 
                   fill={axisLabelColor} 
                   fontSize={10} 
                   fontWeight={600} 
@@ -224,7 +225,7 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
               />
             </AreaChart>
           ) : (
-            <BarChart data={data} margin={{ top: 10, right: 14, left: 4, bottom: 25 }}>
+            <BarChart data={data} margin={{ top: 10, right: 14, left: 16, bottom: 25 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
               <XAxis 
                 dataKey="date" 
@@ -234,7 +235,7 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
                 axisLine={false}
               >
                 <Label 
-                  value={granularity === 'hour' ? 'Timeline (Hour of Day)' : 'Timeline (Calendar Date)'} 
+                  value="Timeline" 
                   offset={-10} 
                   position="insideBottom" 
                   fill={axisLabelColor} 
@@ -248,12 +249,13 @@ export default function SearchTrendChart({ data = [], granularity = 'day', theme
                 tickLine={false} 
                 axisLine={false} 
                 allowDecimals={false}
+                width={36}
               >
                 <Label 
                   value="Search Query Count" 
                   angle={-90} 
                   position="insideLeft" 
-                  offset={-5} 
+                  offset={-2} 
                   fill={axisLabelColor} 
                   fontSize={10} 
                   fontWeight={600} 
