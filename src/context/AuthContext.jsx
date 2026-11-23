@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
   const [dbStatus, setDbStatus] = useState({
     connected: true,
     host: 'localhost',
-    dbName: 'Hostinger MySQL',
+    dbName: 'Enterprise Database',
     tableExists: true,
     isChecking: false,
   });
@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
       setDbStatus({
         connected: res.connected !== false,
         host: res.database_host || 'localhost',
-        dbName: res.database_name || 'Hostinger MySQL',
+        dbName: res.database_name || 'Enterprise Database',
         tableExists: res.table_exists !== false,
         isChecking: false,
       });

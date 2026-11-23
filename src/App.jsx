@@ -922,7 +922,7 @@ export default function App() {
       <footer className="border-t border-slate-200 dark:border-slate-900 bg-white/80 dark:bg-slate-950/80 py-4 text-center text-xs text-slate-500 transition-colors duration-200">
         <div className="w-full max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12">
           <p>
-            TGH HR Assistance Agent Analytics • Powered by n8n Workflow Automation & Google Gemini Flash
+            TGH HR Assistance Agent Analytics • Enterprise AI Telemetry & Governance
           </p>
         </div>
       </footer>

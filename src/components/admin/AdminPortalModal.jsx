@@ -184,7 +184,7 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
     saveQuotaConfig(quotaConfig);
     setTimeout(() => {
       setIsSavingQuota(false);
-      setSuccessMessage('✓ Daily quota limits and n8n Teams webhook settings saved successfully!');
+      setSuccessMessage('✓ Daily quota limits and Microsoft Teams alert settings saved successfully!');
     }, 300);
   };
 
@@ -210,14 +210,14 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
       const res = await dispatchTeamsQuotaAlert(sampleAlert, quotaConfig.teamsWebhookUrl);
       setTestResult({
         success: true,
-        message: `Alert dispatched to n8n webhook! (HTTP ${res.status})`,
+        message: `Alert notification dispatched successfully to Microsoft Teams! (HTTP ${res.status})`,
         data: sampleAlert,
       });
       setAlertHistory(getAlertHistory());
     } catch (err) {
       setTestResult({
         success: false,
-        message: `Failed to reach n8n webhook: ${err.message}. Make sure your n8n workflow webhook is active.`,
+        message: `Failed to dispatch Teams notification: ${err.message}. Make sure your Teams alert webhook is active.`,
         data: sampleAlert,
       });
       setAlertHistory(getAlertHistory());
@@ -243,7 +243,7 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
         dateStr: emp.dateStr,
       }, quotaConfig.teamsWebhookUrl);
 
-      setSuccessMessage(`✓ Quota alert for ${emp.name} sent to n8n Teams webhook!`);
+      setSuccessMessage(`✓ Quota alert for ${emp.name} sent to Microsoft Teams!`);
       setAlertHistory(getAlertHistory());
     } catch (err) {
       setErrorMessage(`Failed to send alert for ${emp.name}: ${err.message}`);
@@ -1082,7 +1082,7 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
                                   disabled={testUserAlerting === emp.name}
                                   onClick={() => handleSendManualAlert(emp)}
                                   className="px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-500/10 transition-colors inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                  title="Send breach notification payload to n8n Teams webhook now"
+                                  title="Send breach notification alert to Microsoft Teams now"
                                 >
                                   {testUserAlerting === emp.name ? (
                                     <Loader2 className="w-3 h-3 animate-spin" />

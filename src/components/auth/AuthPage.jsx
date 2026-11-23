@@ -247,7 +247,7 @@ export default function AuthPage({ theme = 'dark', onToggleTheme }) {
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-semibold text-slate-300">
-              Hostinger MySQL & n8n Gateway: Fully Operational
+              All Systems Operational
             </span>
           </div>
           <div className="flex items-center gap-2 text-slate-400">
