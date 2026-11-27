@@ -256,14 +256,6 @@ export const hostingerAuthService = {
       }),
     });
 
-    // Automatically trigger n8n Outlook notification webhook
-    triggerUserCreatedWebhook({
-      email,
-      full_name: userData.full_name || userData.fullName,
-      department: userData.department || 'Engineering & IT',
-      role: userData.role || 'technical',
-    }).catch(() => {});
-
     return res.user || res;
   },
 
