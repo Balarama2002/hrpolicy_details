@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, UserPlus, Shield, X, Check, AlertCircle, Loader2, 
   Trash2, RefreshCw, RotateCcw, Crown, Code2, Mail, Building, Clock, Search, ChevronDown, ChevronUp,
@@ -23,6 +23,7 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
   
   // Navigation tabs: 'users' | 'quotas'
   const [activeTab, setActiveTab] = useState('users');
+  const isSubmittingRef = useRef(false);
 
   // Users Directory state
   const [users, setUsers] = useState([]);
@@ -104,6 +105,9 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
   // -------------------------------------------------------------
   const handleAddUser = async (e) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
     setErrorMessage('');
     setSuccessMessage('');
 
@@ -115,15 +119,18 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
     const domainErr = validateCompanyEmail(cleanEmail);
     if (domainErr) {
       setErrorMessage(domainErr);
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
       return;
     }
 
     if (!newFullName.trim()) {
       setErrorMessage('Full name is required.');
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
       return;
     }
 
-    setIsSubmitting(true);
     try {
       const newUser = await addUser({
         full_name: newFullName.trim(),
@@ -142,6 +149,9 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
       setErrorMessage(err.message || 'Failed to provision user.');
     } finally {
       setIsSubmitting(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 1000);
     }
   };
 

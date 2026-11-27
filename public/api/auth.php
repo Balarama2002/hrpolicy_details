@@ -407,42 +407,49 @@ if ($action === 'add-user') {
         $id = (string)time();
     }
 
-    // Trigger n8n user_created_email webhook for Outlook notification
-    $n8nWebhookUrl = 'https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email';
-    $usernamePrefix = strpos($email, '@') !== false ? explode('@', $email)[0] : $email;
-    $webhookPayload = json_encode([
-        'username'        => $email,
-        'name'            => $fullName,
-        'email'           => $email,
-        'full_name'       => $fullName,
-        'user_name'       => $usernamePrefix,
-        'username_prefix' => $usernamePrefix,
-        'department'      => $department,
-        'role'            => $role,
-        'created_at'      => date('c'),
-        'timestamp'       => date('c'),
-    ]);
+    // Trigger n8n user_created_email webhook for Outlook notification with 30s deduplication lock
+    $lockFile = sys_get_temp_dir() . '/tgh_user_created_' . md5($email) . '.lock';
+    $lastSent = file_exists($lockFile) ? (int)@file_get_contents($lockFile) : 0;
 
-    if (function_exists('curl_init')) {
-        $ch = curl_init($n8nWebhookUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $webhookPayload);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 3);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_exec($ch);
-        curl_close($ch);
-    } else {
-        $ctx = stream_context_create([
-            'http' => [
-                'method'  => 'POST',
-                'header'  => "Content-Type: application/json\r\n",
-                'content' => $webhookPayload,
-                'timeout' => 3,
-            ]
+    if (time() - $lastSent > 30) {
+        @file_put_contents($lockFile, (string)time());
+
+        $n8nWebhookUrl = 'https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email';
+        $usernamePrefix = strpos($email, '@') !== false ? explode('@', $email)[0] : $email;
+        $webhookPayload = json_encode([
+            'username'        => $email,
+            'name'            => $fullName,
+            'email'           => $email,
+            'full_name'       => $fullName,
+            'user_name'       => $usernamePrefix,
+            'username_prefix' => $usernamePrefix,
+            'department'      => $department,
+            'role'            => $role,
+            'created_at'      => date('c'),
+            'timestamp'       => date('c'),
         ]);
-        @file_get_contents($n8nWebhookUrl, false, $ctx);
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($n8nWebhookUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $webhookPayload);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_exec($ch);
+            curl_close($ch);
+        } else {
+            $ctx = stream_context_create([
+                'http' => [
+                    'method'  => 'POST',
+                    'header'  => "Content-Type: application/json\r\n",
+                    'content' => $webhookPayload,
+                    'timeout' => 3,
+                ]
+            ]);
+            @file_get_contents($n8nWebhookUrl, false, $ctx);
+        }
     }
 
     echo json_encode([

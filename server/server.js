@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const COMPANY_DOMAIN = process.env.COMPANY_DOMAIN || '@techygeekhub.com';
+const userCreatedWebhookCooldown = new Map();
 
 // Configure Email Transporter for sending temporary passwords
 const mailTransporter = nodemailer.createTransport({
@@ -425,28 +426,37 @@ const authHandler = async (req, res) => {
         last_login: null,
       };
 
-      // Trigger n8n user_created_email webhook for Outlook notification
-      try {
-        const usernamePrefix = email.includes('@') ? email.split('@')[0] : email;
-        const webhookPayload = {
-          username: email,
-          name: fullName,
-          email: email,
-          full_name: fullName,
-          user_name: usernamePrefix,
-          username_prefix: usernamePrefix,
-          department,
-          role,
-          created_at: new Date().toISOString(),
-          timestamp: new Date().toISOString(),
-        };
-        fetch('https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload),
-        }).then(r => console.log(`[n8n Webhook] user_created_email dispatched for ${email}: HTTP ${r.status}`))
-          .catch(e => console.warn(`[n8n Webhook] user_created_email dispatch warning:`, e.message));
-      } catch (e) {}
+      // Trigger n8n user_created_email webhook for Outlook notification with 30s deduplication cooldown
+      const cleanEmail = email.toLowerCase().trim();
+      const now = Date.now();
+      const lastSent = userCreatedWebhookCooldown.get(cleanEmail) || 0;
+
+      if (now - lastSent > 30000) {
+        userCreatedWebhookCooldown.set(cleanEmail, now);
+        try {
+          const usernamePrefix = cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail;
+          const webhookPayload = {
+            username: cleanEmail,
+            name: fullName,
+            email: cleanEmail,
+            full_name: fullName,
+            user_name: usernamePrefix,
+            username_prefix: usernamePrefix,
+            department,
+            role,
+            created_at: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
+          };
+          fetch('https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(webhookPayload),
+          }).then(r => console.log(`[n8n Webhook] user_created_email dispatched for ${cleanEmail}: HTTP ${r.status}`))
+            .catch(e => console.warn(`[n8n Webhook] user_created_email dispatch warning:`, e.message));
+        } catch (e) {}
+      } else {
+        console.log(`[Webhook Deduplication] Skipping duplicate trigger for ${cleanEmail} (sent ${Math.round((now - lastSent) / 1000)}s ago)`);
+      }
 
       return res.json({ success: true, message: `User ${fullName} provisioned.`, user: newUser });
     } catch (err) {

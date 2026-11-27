@@ -38,6 +38,7 @@ function devApiPlugin() {
   ]);
 
   const devOtps = new Map();
+  const devUserWebhookCooldown = new Map();
   const devQuotaConfig = {
     dailyMessageLimit: 5,
     dailyTokenLimit: 25000,
@@ -366,27 +367,36 @@ function devApiPlugin() {
 
                 console.log(`[ADMIN PORTAL] Provisioned new user: ${fullName} (${email}, Role: ${role})`);
 
-                // Dispatch n8n user_created_email webhook for Outlook notification
-                try {
-                  const usernamePrefix = email.includes('@') ? email.split('@')[0] : email;
-                  fetch('https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      username: email,
-                      name: fullName,
-                      email: email,
-                      full_name: fullName,
-                      user_name: usernamePrefix,
-                      username_prefix: usernamePrefix,
-                      department,
-                      role,
-                      created_at: new Date().toISOString(),
-                      timestamp: new Date().toISOString(),
-                    }),
-                  }).then(r => console.log(`[DEV n8n Webhook] user_created_email dispatched for ${email}: HTTP ${r.status}`))
-                    .catch(e => console.warn(`[DEV n8n Webhook] user_created_email dispatch warning:`, e.message));
-                } catch (e) {}
+                // Dispatch n8n user_created_email webhook with 30s deduplication cooldown
+                const cleanEmail = email.toLowerCase().trim();
+                const now = Date.now();
+                const lastSent = devUserWebhookCooldown.get(cleanEmail) || 0;
+
+                if (now - lastSent > 30000) {
+                  devUserWebhookCooldown.set(cleanEmail, now);
+                  try {
+                    const usernamePrefix = cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail;
+                    fetch('https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        username: cleanEmail,
+                        name: fullName,
+                        email: cleanEmail,
+                        full_name: fullName,
+                        user_name: usernamePrefix,
+                        username_prefix: usernamePrefix,
+                        department,
+                        role,
+                        created_at: new Date().toISOString(),
+                        timestamp: new Date().toISOString(),
+                      }),
+                    }).then(r => console.log(`[DEV n8n Webhook] user_created_email dispatched for ${cleanEmail}: HTTP ${r.status}`))
+                      .catch(e => console.warn(`[DEV n8n Webhook] user_created_email dispatch warning:`, e.message));
+                  } catch (e) {}
+                } else {
+                  console.log(`[DEV Webhook Deduplication] Skipping duplicate trigger for ${cleanEmail} (sent ${Math.round((now - lastSent) / 1000)}s ago)`);
+                }
 
                 res.end(JSON.stringify({
                   success: true,
