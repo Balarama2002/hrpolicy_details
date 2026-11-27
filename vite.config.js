@@ -366,6 +366,28 @@ function devApiPlugin() {
 
                 console.log(`[ADMIN PORTAL] Provisioned new user: ${fullName} (${email}, Role: ${role})`);
 
+                // Dispatch n8n user_created_email webhook for Outlook notification
+                try {
+                  const usernamePrefix = email.includes('@') ? email.split('@')[0] : email;
+                  fetch('https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      username: email,
+                      name: fullName,
+                      email: email,
+                      full_name: fullName,
+                      user_name: usernamePrefix,
+                      username_prefix: usernamePrefix,
+                      department,
+                      role,
+                      created_at: new Date().toISOString(),
+                      timestamp: new Date().toISOString(),
+                    }),
+                  }).then(r => console.log(`[DEV n8n Webhook] user_created_email dispatched for ${email}: HTTP ${r.status}`))
+                    .catch(e => console.warn(`[DEV n8n Webhook] user_created_email dispatch warning:`, e.message));
+                } catch (e) {}
+
                 res.end(JSON.stringify({
                   success: true,
                   message: `User ${fullName} has been successfully provisioned.`,

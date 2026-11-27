@@ -407,6 +407,44 @@ if ($action === 'add-user') {
         $id = (string)time();
     }
 
+    // Trigger n8n user_created_email webhook for Outlook notification
+    $n8nWebhookUrl = 'https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email';
+    $usernamePrefix = strpos($email, '@') !== false ? explode('@', $email)[0] : $email;
+    $webhookPayload = json_encode([
+        'username'        => $email,
+        'name'            => $fullName,
+        'email'           => $email,
+        'full_name'       => $fullName,
+        'user_name'       => $usernamePrefix,
+        'username_prefix' => $usernamePrefix,
+        'department'      => $department,
+        'role'            => $role,
+        'created_at'      => date('c'),
+        'timestamp'       => date('c'),
+    ]);
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($n8nWebhookUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $webhookPayload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_exec($ch);
+        curl_close($ch);
+    } else {
+        $ctx = stream_context_create([
+            'http' => [
+                'method'  => 'POST',
+                'header'  => "Content-Type: application/json\r\n",
+                'content' => $webhookPayload,
+                'timeout' => 3,
+            ]
+        ]);
+        @file_get_contents($n8nWebhookUrl, false, $ctx);
+    }
+
     echo json_encode([
         'success' => true,
         'message' => "User {$fullName} provisioned successfully.",

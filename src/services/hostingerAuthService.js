@@ -4,6 +4,46 @@
  */
 
 import { validateCompanyEmail } from '../utils/validation';
+import { getProxiedUrl } from './n8nApi';
+
+export const USER_CREATED_WEBHOOK_URL = 'https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email';
+
+/**
+ * Dispatches an event to the n8n Outlook notification webhook whenever a new user is created
+ * @param {Object} userData 
+ */
+export async function triggerUserCreatedWebhook(userData) {
+  const email = (userData.email || userData.username || '').trim().toLowerCase();
+  const name = (userData.full_name || userData.name || userData.fullName || '').trim();
+  const usernamePrefix = email.includes('@') ? email.split('@')[0] : email;
+
+  const payload = {
+    username: email,
+    name: name,
+    email: email,
+    full_name: name,
+    user_name: usernamePrefix,
+    username_prefix: usernamePrefix,
+    department: userData.department || 'Engineering & IT',
+    role: userData.role || 'technical',
+    created_at: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    const targetUrl = getProxiedUrl(USER_CREATED_WEBHOOK_URL);
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    console.log(`[USER CREATED WEBHOOK] Successfully triggered n8n webhook for ${name} (${email}): HTTP ${response.status}`);
+    return { success: true, status: response.status };
+  } catch (err) {
+    console.warn(`[USER CREATED WEBHOOK] Dispatch warning for ${name}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
 
 const SESSION_STORAGE_KEY = 'tgh_hostinger_user_session';
 const BACKEND_URL_KEY = 'tgh_hostinger_backend_url';
@@ -215,6 +255,15 @@ export const hostingerAuthService = {
         role: userData.role || 'technical',
       }),
     });
+
+    // Automatically trigger n8n Outlook notification webhook
+    triggerUserCreatedWebhook({
+      email,
+      full_name: userData.full_name || userData.fullName,
+      department: userData.department || 'Engineering & IT',
+      role: userData.role || 'technical',
+    }).catch(() => {});
+
     return res.user || res;
   },
 

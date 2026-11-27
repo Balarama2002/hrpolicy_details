@@ -133,7 +133,7 @@ export default function AdminPortalModal({ isOpen, onClose, logs = [] }) {
       });
 
       const displayName = newUser?.full_name || newUser?.user?.full_name || newFullName.trim();
-      setSuccessMessage(`✓ User ${displayName} (${cleanEmail}) has been provisioned as ${newRole.toUpperCase()}!`);
+      setSuccessMessage(`✓ User ${displayName} (${cleanEmail}) has been provisioned as ${newRole.toUpperCase()}! Welcome email webhook triggered.`);
       setNewFullName('');
       setNewEmail('');
       setIsAdding(false);
