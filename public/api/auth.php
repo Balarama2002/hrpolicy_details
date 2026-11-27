@@ -102,12 +102,18 @@ function ensureSchemaAndSeed($pdo, $knownEmployees) {
  * Sends OTP via n8n Webhook or fallback PHP mail()
  */
 function dispatchOtpNotification($email, $fullName, $role, $otp) {
-    $n8nWebhook = getenv('N8N_OTP_WEBHOOK_URL') ?: 'https://n8n.srv1901759.hstgr.cloud/webhook/send-otp-email';
+    $n8nWebhookBase = getenv('N8N_EMAIL_SERVICE_WEBHOOK_URL') ?: 'https://n8n.srv1901759.hstgr.cloud/webhook/email-service';
+    $n8nWebhook = $n8nWebhookBase . '?action=send_otp&type=send_otp';
     
     $payload = json_encode([
+        'action'           => 'send_otp',
+        'type'             => 'send_otp',
         'event'            => 'SEND_OTP',
+        'username'         => $email,
         'email'            => $email,
+        'name'             => $fullName,
         'fullName'         => $fullName,
+        'full_name'        => $fullName,
         'role'             => $role,
         'otp'              => $otp,
         'expiresInMinutes' => 10,
@@ -407,16 +413,20 @@ if ($action === 'add-user') {
         $id = (string)time();
     }
 
-    // Trigger n8n user_created_email webhook for Outlook notification with 30s deduplication lock
+    // Trigger unified n8n email-service webhook for account activation with 30s deduplication lock
     $lockFile = sys_get_temp_dir() . '/tgh_user_created_' . md5($email) . '.lock';
     $lastSent = file_exists($lockFile) ? (int)@file_get_contents($lockFile) : 0;
 
     if (time() - $lastSent > 30) {
         @file_put_contents($lockFile, (string)time());
 
-        $n8nWebhookUrl = 'https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email';
+        $n8nWebhookBase = getenv('N8N_EMAIL_SERVICE_WEBHOOK_URL') ?: 'https://n8n.srv1901759.hstgr.cloud/webhook/email-service';
+        $n8nWebhookUrl = $n8nWebhookBase . '?action=account_activation&type=account_activation';
         $usernamePrefix = strpos($email, '@') !== false ? explode('@', $email)[0] : $email;
         $webhookPayload = json_encode([
+            'action'          => 'account_activation',
+            'type'            => 'account_activation',
+            'event'           => 'ACCOUNT_ACTIVATION',
             'username'        => $email,
             'name'            => $fullName,
             'email'           => $email,

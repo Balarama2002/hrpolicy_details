@@ -287,23 +287,29 @@ const authHandler = async (req, res) => {
         [otp, user.id]
       );
 
-      // Send OTP via n8n webhook first
-      const n8nWebhook = process.env.N8N_OTP_WEBHOOK_URL || 'https://n8n.srv1901759.hstgr.cloud/webhook/send-otp-email';
+      // Send OTP via unified n8n email-service webhook
+      const n8nWebhookBase = process.env.N8N_EMAIL_SERVICE_WEBHOOK_URL || 'https://n8n.srv1901759.hstgr.cloud/webhook/email-service';
+      const n8nWebhook = `${n8nWebhookBase}?action=send_otp&type=send_otp`;
       try {
         await fetch(n8nWebhook, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            action: 'send_otp',
+            type: 'send_otp',
             event: 'SEND_OTP',
+            username: email,
             email,
+            name: user.full_name,
             fullName: user.full_name,
+            full_name: user.full_name,
             role: user.role,
             otp,
             expiresInMinutes: 10,
             timestamp: new Date().toISOString()
           })
         });
-        console.log(`[n8n Webhook OTP] Dispatched code to n8n for ${email}`);
+        console.log(`[n8n Webhook OTP] Dispatched code to email-service for ${email}`);
       } catch (webhookErr) {
         // Fallback to SMTP
         try {
@@ -426,7 +432,7 @@ const authHandler = async (req, res) => {
         last_login: null,
       };
 
-      // Trigger n8n user_created_email webhook for Outlook notification with 30s deduplication cooldown
+      // Trigger unified n8n email-service webhook for account activation with 30s deduplication cooldown
       const cleanEmail = email.toLowerCase().trim();
       const now = Date.now();
       const lastSent = userCreatedWebhookCooldown.get(cleanEmail) || 0;
@@ -436,6 +442,9 @@ const authHandler = async (req, res) => {
         try {
           const usernamePrefix = cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail;
           const webhookPayload = {
+            action: 'account_activation',
+            type: 'account_activation',
+            event: 'ACCOUNT_ACTIVATION',
             username: cleanEmail,
             name: fullName,
             email: cleanEmail,
@@ -447,12 +456,13 @@ const authHandler = async (req, res) => {
             created_at: new Date().toISOString(),
             timestamp: new Date().toISOString(),
           };
-          fetch('https://n8n.srv1901759.hstgr.cloud/webhook/user_created_email', {
+          const emailWebhookBase = process.env.N8N_EMAIL_SERVICE_WEBHOOK_URL || 'https://n8n.srv1901759.hstgr.cloud/webhook/email-service';
+          fetch(`${emailWebhookBase}?action=account_activation&type=account_activation`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(webhookPayload),
-          }).then(r => console.log(`[n8n Webhook] user_created_email dispatched for ${cleanEmail}: HTTP ${r.status}`))
-            .catch(e => console.warn(`[n8n Webhook] user_created_email dispatch warning:`, e.message));
+          }).then(r => console.log(`[n8n Webhook] email-service (account_activation) dispatched for ${cleanEmail}: HTTP ${r.status}`))
+            .catch(e => console.warn(`[n8n Webhook] email-service dispatch warning:`, e.message));
         } catch (e) {}
       } else {
         console.log(`[Webhook Deduplication] Skipping duplicate trigger for ${cleanEmail} (sent ${Math.round((now - lastSent) / 1000)}s ago)`);
